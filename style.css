@@ -1,0 +1,100 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+/* Fixed sidebar on the right */
+#sidebar {
+  position: fixed;
+  top: 20px;           /* distance from top */
+  right: 20px;         /* distance from right */
+  width: 180px;
+  background: #2e2f31;
+  color: white;
+  padding: 10px;
+  z-index: 10;
+
+  /* Fully rounded corners */
+  border-radius: 15px;
+
+  /* Optional: subtle shadow */
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+
+#sidebar h3 {
+  margin-top: 0;
+  font-size: 16px;
+  color: #ffffff;
+}
+
+/* Object selection buttons */
+.palette {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item {
+  background: #444;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 5px;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.item:hover {
+  background: #666;
+}
+
+.item.selected {
+  background: #888;
+}
+
+.item-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  background: #444;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 5px;
+  user-select: none;
+  margin-bottom: 5px;
+}
+
+.item:hover {
+  background: #666;
+}
+
+.submenu {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  margin-left: 10px;
+  margin-bottom: 10px;
+}
+
+.subitem {
+  background: #333;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 14px;
+  color: #ddd;
+}
+
+.subitem:hover {
+  background: #555;
+}

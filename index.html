@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Village Defense Game</title>
+
+  <!-- Link to external stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Right sidebar with object options -->
+<div id="sidebar">
+  <h3>Available Objects</h3>
+  <div class="palette">
+
+    <div class="item-group">
+      <div class="item toggle" data-target="house-submenu">House</div>
+      <div class="submenu" id="house-submenu">
+        <div class="subitem" data-type="house1">House Type 1</div>
+        <div class="subitem" data-type="house2">House Type 2</div>
+      </div>
+    </div>
+
+    <div class="item-group">
+      <div class="item toggle" data-target="wall-submenu">Wall</div>
+      <div class="submenu" id="wall-submenu">
+        <div class="subitem" data-type="wall1">Wall Type 1</div>
+        <div class="subitem" data-type="wall2">Wall Type 2</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+  <!-- Entry point for JavaScript (Three.js logic) -->
+  <script type="module" src="main.js"></script>
+
+</body>
+</html>
