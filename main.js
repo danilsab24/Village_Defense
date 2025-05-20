@@ -162,19 +162,27 @@ function createDragMesh(type) {
 
   return mesh;
 }
+function dragY(obj) {
+  const bbox = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  return size.y / 2;
+}
 
 function updateDragPosition(event) {
   if (!dragObject) return;
 
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
   const hit = raycaster.intersectObject(grid.getPlaneMesh());
 
   if (hit.length) {
     const p = hit[0].point;
-    dragObject.position.set(snap(p.x), 5, snap(p.z));
+    const cellSize = grid.size / grid.divisions;
+    dragObject.position.set(snap(p.x, cellSize), dragY(dragObject), snap(p.z, cellSize));
   }
 }
 
@@ -194,7 +202,8 @@ function dropOrDispose() {
 
   if (pos.x >= -half && pos.x <= half && pos.z >= -half && pos.z <= half) {
     // inside the platform -> convert to final object
-    dragObject.position.y = 0.5;
+    const cellSize = grid.size / grid.divisions;
+    dragObject.position.set(snap(pos.x, cellSize),0.5,snap(pos.z, cellSize));
 
     if (dragObject.userData.type === 'cube') {
       new Wall(scene, dragObject.position);
@@ -221,8 +230,8 @@ function dropOrDispose() {
 }
 
 /* ---------- HELPERS ---------- */
-function snap(value, step = 1) {
-  return Math.round(value / step) * step;
+function snap(value, cellSize) {
+  return Math.round(value / cellSize) * cellSize;
 }
 
 /* ---------- HANDLE RESIZE ---------- */
