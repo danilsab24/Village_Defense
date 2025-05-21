@@ -1,136 +1,121 @@
-// main.js
+// main.js – keyboard WASD move, Q/E yaw, R/F pitch
 import * as THREE from 'https://esm.sh/three@0.150.1';
 import { OrbitControls } from 'https://esm.sh/three@0.150.1/examples/jsm/controls/OrbitControls.js';
 import { Grid } from './grid.js';
 import { setupDragAndDrop } from './DragAndDrop.js';
 
 let scene, camera, renderer, controls;
-let grid;
-let dragManager;
+let grid, dragManager;
+const moveKeys   = { w:false, a:false, s:false, d:false, q:false, e:false, r:false, f:false };
+const moveSpeed  = 0.5;   // translation speed per frame
+const rotateStep = 0.04;  // radians per frame for keyboard orbit
 
 init();
 animate();
 
-/* ---------- INITIALISATION ---------- */
 function init() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1e1f21);
+	scene = new THREE.Scene();
+	scene.background = new THREE.Color(0x1e1f21);
 
-  camera = new THREE.PerspectiveCamera(
-    60,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-  );
-  camera.position.set(30, 30, 30);
-  camera.lookAt(0, 0, 0);
+	camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+	camera.position.set(30, 30, 30);
+	camera.lookAt(0, 0, 0);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+	renderer = new THREE.WebGLRenderer({ antialias:true });
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	document.body.appendChild(renderer.domElement);
 
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.enablePan = false;
+	controls = new OrbitControls(camera, renderer.domElement);
+	controls.enableDamping = true;
+	controls.enablePan     = false;
 
-  const light = new THREE.PointLight(0xffffff, 3, 200);
-  light.position.set(50, 20, 0);
-  scene.add(light, new THREE.PointLightHelper(light, 2));
+	// add main point light and its helper correctly
+	const mainLight = new THREE.PointLight(0xffffff, 3, 200);
+	mainLight.position.set(50, 20, 0);
+	scene.add(mainLight);
+	scene.add(new THREE.PointLightHelper(mainLight, 2));
 
-  grid = new Grid(scene);
+	grid = new Grid(scene);
+	dragManager = setupDragAndDrop({ scene, camera, renderer, grid, controls });
 
-  dragManager = setupDragAndDrop({
-    scene,
-    camera,
-    renderer,
-    grid,
-    controls
-  });
+	window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (k in moveKeys) moveKeys[k] = true; });
+	window.addEventListener('keyup',   e => { const k = e.key.toLowerCase(); if (k in moveKeys) moveKeys[k] = false; });
 
-  initUI();
+	initUI();
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
+function animate(){
+	requestAnimationFrame(animate);
+	keyboardControl();
+	controls.update();
+	renderer.render(scene, camera);
 }
 
-/* ---------- UI ---------- */
-function initUI() {
-  /* --- sidebar toggles --- */
-  document.querySelectorAll('.toggle').forEach((el) => {
-    el.addEventListener('click', () => {
-      const targetId = el.dataset.target;
-      const submenu = document.getElementById(targetId);
-
-      document.querySelectorAll('.submenu').forEach((sub) => {
-        if (sub.id !== targetId) sub.style.display = 'none';
-      });
-
-      submenu.style.display =
-        submenu.style.display === 'flex' ? 'none' : 'flex';
-    });
-  });
-
-  /* --- previews --- */
-  document.querySelectorAll('.preview').forEach((canvas) => {
-    const observer = new ResizeObserver((entries) => {
-      if (entries[0].contentRect.height > 0) {
-        observer.disconnect();
-        initPreviewCanvas(canvas);
-      }
-    });
-    observer.observe(canvas);
-  });
+// translate and orbit the camera around controls.target
+function keyboardControl(){
+	// translation (WASD)
+	const dir = new THREE.Vector3();
+	if(moveKeys.w) dir.z -= 1;
+	if(moveKeys.s) dir.z += 1;
+	if(moveKeys.a) dir.x -= 1;
+	if(moveKeys.d) dir.x += 1;
+	if(dir.lengthSq()>0){
+		dir.normalize().applyQuaternion(camera.quaternion);
+		camera.position.addScaledVector(dir, moveSpeed);
+		controls.target.addScaledVector(dir, moveSpeed);
+	}
+	// yaw Q/E (around Y axis)
+	if(moveKeys.q) rotateAroundTarget(new THREE.Vector3(0,1,0),  rotateStep);
+	if(moveKeys.e) rotateAroundTarget(new THREE.Vector3(0,1,0), -rotateStep);
+	// pitch R/F (around camera-right axis)
+	const right = new THREE.Vector3().subVectors(camera.position, controls.target).cross(new THREE.Vector3(0,1,0)).normalize();
+	if(moveKeys.r) rotateAroundTarget(right,  rotateStep);
+	if(moveKeys.f) rotateAroundTarget(right, -rotateStep);
 }
 
-/* ---------- PREVIEW CANVAS ---------- */
-function initPreviewCanvas(canvas) {
-  const type = canvas.dataset.type;
-
-  const previewScene = new THREE.Scene();
-  const previewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  previewCamera.position.set(1.5, 1.5, 1.5);
-  previewCamera.lookAt(0, 0, 0);
-
-  const previewRenderer = new THREE.WebGLRenderer({ canvas, alpha: true });
-  previewRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
-  previewRenderer.setPixelRatio(window.devicePixelRatio);
-
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(2, 2, 2);
-  previewScene.add(light);
-
-  const mesh =
-    type === 'cube'
-      ? new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshStandardMaterial({ color: 0x4caf50 })
-        )
-      : new THREE.Mesh(
-          new THREE.BoxGeometry(1.5, 0.75, 1),
-          new THREE.MeshStandardMaterial({ color: 0x2196f3 })
-        );
-
-  previewScene.add(mesh);
-
-  const renderPreview = () => {
-    mesh.rotation.y += 0.01;
-    previewRenderer.render(previewScene, previewCamera);
-    requestAnimationFrame(renderPreview);
-  };
-  renderPreview();
-
-  /* ----- DRAG START ----- */
-  canvas.addEventListener('pointerdown', (e) => {
-    dragManager.startDrag(type, e);
-  });
+function rotateAroundTarget(axis, angle){
+	const target = controls.target;
+	const pos    = camera.position.clone().sub(target);
+	pos.applyAxisAngle(axis, angle);
+	camera.position.copy(target).add(pos);
+	camera.lookAt(target);
 }
 
-/* ---------- HANDLE RESIZE ---------- */
+function initUI(){
+	document.querySelectorAll('.toggle').forEach(el => {
+		el.addEventListener('click', () => {
+			const id = el.dataset.target;
+			document.querySelectorAll('.submenu').forEach(s => { if(s.id !== id) s.style.display = 'none'; });
+			const menu = document.getElementById(id);
+			menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+		});
+	});
+	document.querySelectorAll('.preview').forEach(canvas => {
+		const obs = new ResizeObserver(rs => { if(rs[0].contentRect.height > 0){ obs.disconnect(); initPreviewCanvas(canvas);} });
+		obs.observe(canvas);
+	});
+}
+
+function initPreviewCanvas(c){
+	const t = c.dataset.type;
+	const s = new THREE.Scene();
+	const cam = new THREE.PerspectiveCamera(45,1,0.1,100);
+	cam.position.set(1.5,1.5,1.5);
+	cam.lookAt(0,0,0);
+	const ren = new THREE.WebGLRenderer({ canvas:c, alpha:true });
+	ren.setSize(c.clientWidth, c.clientHeight);
+	ren.setPixelRatio(window.devicePixelRatio);
+		const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+	dirLight.position.set(2, 2, 2);
+	s.add(dirLight);
+	const mesh = t==='cube' ? new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({ color:0x4caf50 })) : new THREE.Mesh(new THREE.BoxGeometry(1.5,0.75,1), new THREE.MeshStandardMaterial({ color:0x2196f3 }));
+	s.add(mesh);
+	(function loop(){ mesh.rotation.y += 0.01; ren.render(s, cam); requestAnimationFrame(loop); })();
+	c.addEventListener('pointerdown', e => dragManager.startDrag(t,e));
+}
+
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize(window.innerWidth, window.innerHeight);
 });
