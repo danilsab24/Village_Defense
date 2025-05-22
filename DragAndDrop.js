@@ -1,150 +1,267 @@
-// DragAndDrop.js 
+// DragAndDrop.js
 import * as THREE from 'https://esm.sh/three@0.150.1';
 import { Wall } from './wall.js';
 import { House } from './village.js';
 
-export function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
-	const raycaster = new THREE.Raycaster();
-	const mouse     = new THREE.Vector2();
-	const cellSize  = grid.size / grid.divisions;
+function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 
-	let dragging = false;
-	let dragObject = null;
-	let currentCursorPos = null;
-	let currentOffset = new THREE.Vector3();
+    // GLOBAL VARIABLES
+    const raycaster = new THREE.Raycaster(); // for mouse picking
+    const mouse = new THREE.Vector2(); // coordinates of mouse
+    const cellSize = grid.size / grid.divisions;
+	
+	// Utilis variables for Drag and Drop feature
+    let dragging = false;
+    let dragObject = null;
+    let currentPos = null;
+    let cursorOffset = new THREE.Vector3();
 
-	// Starts the dragging process when a block is selected
-	function startDrag(type, e) {
-		if (dragging) return;
-		dragObject = createPreviewMesh(type);
-		dragging = true;
-		scene.add(dragObject);
-		controls.enabled = false;
-		computeCursorOffset(dragObject);
-		updateDragPosition(e);
-		window.addEventListener('pointermove', updateDragPosition);
-		window.addEventListener('pointerup', finishDrag, { once: true });
-		window.addEventListener('keydown', rotatePreview);
-	}
+    const heightMap = new Map(); // need for taking care of height and object of the scene
+	/*
+	  Generates a unique string key from grid coordinates (ix, iz) to use as Map identifier.
+	  Used by heightMap to track object placement in grid cells.
+	  Example: coordinates (5, 3) → key "5_3"
+	 */
+    const mapKey = (ix, iz) => `${ix}_${iz}`;
+    const worldToIndex = (x) => Math.round(x / cellSize);
+	
 
-	// Computes the offset between object's center and its front-left corner to center the block on cursor
-	function computeCursorOffset(obj) {
-		const box = new THREE.Box3().setFromObject(obj);
-		const size = new THREE.Vector3();
-		box.getSize(size);
-		currentOffset.set(size.x / 2, 0, size.z / 2);
-	}
+    // Helper functions
+    function computeCursorOffset() {
+        const box = new THREE.Box3().setFromObject(dragObject);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        cursorOffset.set(size.x / 2, 0, size.z / 2);
+    }
 
-	// Updates the preview object's position to follow the cursor
-	function updateDragPosition(e) {
-		if (!dragObject) return;
-		const rect = renderer.domElement.getBoundingClientRect();
-		mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-		mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-		raycaster.setFromCamera(mouse, camera);
-		const hit = raycaster.intersectObject(grid.getPlaneMesh());
-		if (!hit.length) return;
-		const p = hit[0].point;
-		currentCursorPos = p.clone();
-		const { spanX, spanZ } = getSpans(dragObject);
-		dragObject.position.set(
-			snap(p.x - currentOffset.x + cellSize / 2, spanX),
-			halfHeight(dragObject),
-			snap(p.z - currentOffset.z + cellSize / 2, spanZ)
-		);
-	}
-
-	// Finalizes the drag and either places the block or drops it
-	function finishDrag() {
-		window.removeEventListener('pointermove', updateDragPosition);
-		window.removeEventListener('keydown', rotatePreview);
-		placeOrDrop();
-		controls.enabled = true;
-		dragging = false;
-		dragObject = null;
-		currentCursorPos = null;
-	}
-
-	// Rotates the preview object by 90 degrees when space is pressed
-	function rotatePreview(e) {
-		if (!dragObject || e.code !== 'Space') return;
-		dragObject.rotation.y += Math.PI / 2;
-		computeCursorOffset(dragObject);
-		if (currentCursorPos) {
-			const { spanX, spanZ } = getSpans(dragObject);
-			dragObject.position.set(
-				snap(currentCursorPos.x - currentOffset.x + cellSize / 2, spanX),
-				halfHeight(dragObject),
-				snap(currentCursorPos.z - currentOffset.z + cellSize / 2, spanZ)
-			);
+	function cellSnap(value, span = 1) {
+		// Per oggetti pari (2,4,…) lo snap deve cadere sulla linea di griglia,
+		// per quelli dispari (1,3,…) sul centro-cella.
+		if (span % 2 === 0) {
+			const idx = Math.round(value / cellSize - 0.5);   // linea di griglia
+			return idx * cellSize + (span / 2) * cellSize;    // centro del blocco
+		} else {
+			const idx = Math.round(value / cellSize);         // centro-cella
+			return idx * cellSize + 0.5 * cellSize;
 		}
 	}
 
-	// Places the block into the scene or lets it fall off the platform
-	function placeOrDrop() {
-		if (!dragObject || !currentCursorPos) return;
-		const { spanX, spanZ } = getSpans(dragObject);
-		dragObject.position.set(
-			snap(currentCursorPos.x - currentOffset.x + cellSize / 2, spanX),
-			halfHeight(dragObject),
-			snap(currentCursorPos.z - currentOffset.z + cellSize / 2, spanZ)
-		);
-		const half = grid.size / 2;
-		if (Math.abs(dragObject.position.x) > half || Math.abs(dragObject.position.z) > half) {
-			const fall = setInterval(() => {
-				if (!dragObject) return clearInterval(fall);
-				dragObject.position.y -= 0.5;
-				if (dragObject.position.y < -10) {
-					scene.remove(dragObject);
-					clearInterval(fall);
-				}
-			}, 16);
+	function getSpans(obj) {
+		// muri: sempre 1 × 1
+		if (obj.userData?.isWall) return { sx: 1, sz: 1 };
+
+		// case: 2 × 1 oppure 1 × 2 a seconda della rotazione
+		if (obj.userData?.isHouse) {
+			const rotated = Math.round(obj.rotation.y / (Math.PI / 2)) % 2 !== 0;
+			return rotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+		}
+
+		// preview durante il drag (usa la vecchia logica)
+		return obj.userData.type === 'cube'
+			? { sx: 1, sz: 1 }
+			: (() => {
+				const rotated = Math.round(obj.rotation.y / (Math.PI / 2)) % 2 !== 0;
+				return rotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+			})();
+	}
+
+	function cellsCovered(ix0, iz0, sx, sz) {
+		// Con uno span pari il “centro” cade su una linea di griglia,
+		// quindi partiamo da ix0 − (sx-1)/2 invece di ix0 − sx/2
+		const startX = ix0 - Math.floor((sx - 1) / 2);
+		const startZ = iz0 - Math.floor((sz - 1) / 2);
+
+		const cells = [];
+		for (let dx = 0; dx < sx; dx++) {
+			for (let dz = 0; dz < sz; dz++) {
+				cells.push({ ix: startX + dx, iz: startZ + dz });
+			}
+		}
+		return cells;
+	}
+
+    function updateHeightMap(cells, newH, top) {
+        cells.forEach(c => heightMap.set(mapKey(c.ix, c.iz), { height: newH, top }));
+    }
+
+	function updateHeightMapFromScene() {
+		heightMap.clear();
+		scene.traverse(obj => {
+			if (obj.userData?.isWall || obj.userData?.isHouse) {
+				const type = obj.userData.isWall ? 'wall' : 'house';
+				const pos = obj.position;
+				const { sx, sz } = getSpans(obj);
+				
+				const ix0 = worldToIndex(pos.x);
+				const iz0 = worldToIndex(pos.z);
+				const cells = cellsCovered(ix0, iz0, sx, sz);
+				
+				// Usa i valori precalcolati da userData
+				updateHeightMap(cells, obj.userData.topHeight, type);
+			}
+		});
+	}
+
+	function canPlace(type, cells) {
+		let refHeight = null;
+		let valid = true;
+
+		for (const c of cells) {
+			const entry       = heightMap.get(mapKey(c.ix, c.iz));
+			const currentTop  = entry ? entry.top    : 'ground';
+			const currentH    = entry ? entry.height : 0;
+
+			//BLOCCO: mai sovrapporre nulla a una house
+			if (currentTop === 'house') {   // c'è già una casa
+				valid = false;
+				break;
+			}
+
+			if (refHeight === null) {
+				refHeight = currentH;
+			} else if (Math.abs(currentH - refHeight) > 0.01) {
+				valid = false;
+				break;
+			}
+		}
+
+		return valid ? (refHeight ?? 0) : null;
+	}
+
+    // Drag and drop functions
+    function startDrag(type, evt) {
+        if (dragging) return;
+
+        updateHeightMapFromScene();
+        dragObject = createPreviewMesh(type);
+        dragging = true;
+        scene.add(dragObject);
+        controls.enabled = false;
+
+        computeCursorOffset();
+        updateDragPosition(evt);
+
+        window.addEventListener('pointermove', updateDragPosition);
+        window.addEventListener('pointerup', finishDrag, { once: true });
+        window.addEventListener('keydown', rotatePreview);
+    }
+
+    function updateDragPosition(evt) {
+        if (!dragObject) return;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((evt.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hit = raycaster.intersectObject(grid.getPlaneMesh());
+        if (!hit.length) return;
+
+        currentPos = hit[0].point.clone();
+        const { sx, sz } = getSpans(dragObject);
+
+        const baseX = cellSnap(currentPos.x - cursorOffset.x + cellSize / 2, sx);
+        const baseZ = cellSnap(currentPos.z - cursorOffset.z + cellSize / 2, sz);
+
+        const ix0 = worldToIndex(baseX);
+        const iz0 = worldToIndex(baseZ);
+        const cells = cellsCovered(ix0, iz0, sx, sz);
+        const objType = dragObject.userData.type === 'cube' ? 'wall' : 'house';
+
+        const baseH = canPlace(objType, cells);
+        const objHeight = getObjectHeight(dragObject);
+
+        if (baseH === null) {
+            // Invalid position - show red preview at ground level
+            dragObject.material.color.set(0xff4444);
+            dragObject.position.set(baseX, objHeight/2, baseZ);
+        } else {
+            // Valid position - show normal color at correct height
+            dragObject.material.color.set(objType === 'wall' ? 0x4caf50 : 0x2196f3);
+            dragObject.position.set(baseX, baseH + objHeight/2, baseZ);
+        }
+    }
+
+    function rotatePreview(evt) {
+        if (!dragObject || evt.code !== 'Space') return;
+        dragObject.rotation.y += Math.PI / 2;
+        computeCursorOffset();
+        if (currentPos) updateDragPosition(evt);
+    }
+
+    function finishDrag() {
+        window.removeEventListener('pointermove', updateDragPosition);
+        window.removeEventListener('keydown', rotatePreview);
+
+        placeOrCancel();
+        controls.enabled = true;
+        dragging = false;
+        dragObject = null;
+        currentPos = null;
+    }
+
+    function placeOrCancel() {
+		if (!dragObject || !currentPos) return;
+
+		const { sx, sz } = getSpans(dragObject);
+		const baseX = cellSnap(currentPos.x - cursorOffset.x + cellSize / 2, sx);
+		const baseZ = cellSnap(currentPos.z - cursorOffset.z + cellSize / 2, sz);
+
+		const ix0 = worldToIndex(baseX);
+		const iz0 = worldToIndex(baseZ);
+		const cells = cellsCovered(ix0, iz0, sx, sz);
+		const objType = dragObject.userData.type === 'cube' ? 'wall' : 'house';
+		const baseH = canPlace(objType, cells);
+
+		if (baseH === null) {
 			scene.remove(dragObject);
 			return;
 		}
-		const rot = dragObject.rotation.y;
-		if (dragObject.userData.type === 'cube') {
-			const w = new Wall(scene, dragObject.position.clone(), cellSize);
-			w.mesh.rotation.y = rot;
+
+		const objHeight = getObjectHeight(dragObject);
+		const finalY = baseH + (objHeight / 2);
+
+		// Creazione oggetto con posizionamento corretto
+		let realObject;
+		if (objType === 'wall') {
+			realObject = new Wall(scene, new THREE.Vector3(baseX, finalY, baseZ), cellSize);
 		} else {
-			const h = new House(scene, dragObject.position.clone(), cellSize);
-			h.mesh.rotation.y = rot;
+			realObject = new House(scene, new THREE.Vector3(baseX, finalY, baseZ), cellSize);
 		}
+
+		// Aggiornamento rotazione
+		realObject.mesh.rotation.y = dragObject.rotation.y;
+
+		// Aggiornamento mappa
+		updateHeightMapFromScene(); // Solo questo aggiornamento necessario
+
+		// Pulizia
 		scene.remove(dragObject);
 	}
 
-	// Creates a preview mesh depending on the type of block
-	function createPreviewMesh(type) {
-		const isCube = type === 'cube';
-		const geo = isCube ? new THREE.BoxGeometry(cellSize, 1, cellSize) : new THREE.BoxGeometry(cellSize * 2, 0.75, cellSize);
-		const mat = new THREE.MeshStandardMaterial({ color: isCube ? 0x4caf50 : 0x2196f3 });
-		const mesh = new THREE.Mesh(geo, mat);
-		mesh.userData.type = type;
-		mesh.position.y = halfHeight(mesh);
-		return mesh;
-	}
+    function getObjectHeight(obj) {
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        return size.y;
+    }
 
-	// Snaps a coordinate to the grid based on the object's span (width in cells)
-	function snap(value, span = 1) {
-		const cellIdx = Math.round(value / cellSize);
-		const offset = (span % 2 === 0) ? (span / 2) * cellSize : cellSize / 2;
-		return cellIdx * cellSize + offset;
-	}
+    function createPreviewMesh(type) {
+        const geometry = type === 'cube'
+            ? new THREE.BoxGeometry(cellSize, 1, cellSize)
+            : new THREE.BoxGeometry(cellSize * 2, 0.75, cellSize);
 
-	// Determines how many cells the object spans in X and Z directions
-	function getSpans(obj) {
-		if (obj.userData.type === 'cube') return { spanX: 1, spanZ: 1 };
-		const rotated = Math.round(obj.rotation.y / (Math.PI / 2)) % 2 !== 0;
-		return rotated ? { spanX: 1, spanZ: 2 } : { spanX: 2, spanZ: 1 };
-	}
+        const material = new THREE.MeshStandardMaterial({
+            color: type === 'cube' ? 0x4caf50 : 0x2196f3,
+            transparent: true,
+            opacity: 0.7
+        });
 
-	// Returns half the height of a 3D object using its bounding box
-	function halfHeight(obj) {
-		const box = new THREE.Box3().setFromObject(obj);
-		const s = new THREE.Vector3();
-		box.getSize(s);
-		return s.y / 2;
-	}
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.userData.type = type === 'cube' ? 'cube' : 'house';
+        return mesh;
+    }
 
-	return { startDrag };
+    return { startDrag };
 }
+
+export { setupDragAndDrop };
