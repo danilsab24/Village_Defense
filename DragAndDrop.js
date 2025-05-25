@@ -156,14 +156,23 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 		let refHeight = null;
 		let valid = true;
 
+		// Compute grid bounds 
+		const halfDiv = grid.divisions / 2; 
+		const minIndex = -halfDiv; 
+		const maxIndex = halfDiv;  
+
 		for (const c of cells) {
+			// check if the cell is within grid bounds
+			if (c.ix < minIndex || c.ix > maxIndex || c.iz < minIndex || c.iz > maxIndex) {
+				valid = false;
+				break;
+			}
 
-			// Get height map entry for current cell
-			const entry       = heightMap.get(mapKey(c.ix, c.iz));
-			const currentTop  = entry ? entry.top    : 'ground';
-			const currentH    = entry ? entry.height : 0;
+			// Check for height data in the height map
+			const entry = heightMap.get(mapKey(c.ix, c.iz));
+			const currentTop = entry ? entry.top : 'ground';
+			const currentH = entry ? entry.height : 0;
 
-			// Never allow overlapping with houses
 			if (currentTop === 'house') {   
 				valid = false;
 				break;
@@ -220,8 +229,8 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 
 		// Convert mouse coordinates to normalized device coordinates (-1 to +1)
         const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((evt.clientY - rect.top) / rect.height) * 2 + 1;
+        mouse.x = ((evt.clientX - rect.left) / rect.width)* 2 - 1;
+        mouse.y = -((evt.clientY - rect.top) / rect.height)* 2 + 1;
 
 		/*
 		 Raycast from camera to grid plane, handles mouse movement during drag-and-drop operations by:
@@ -238,8 +247,8 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         const { sx, sz } = getSpans(dragObject);                        // Get object dimensions in grid cells
 
 		// Calculate snapped position considering:
-        const baseX = cellSnap(currentPos.x - cursorOffset.x + cellSize / 2, sx);
-        const baseZ = cellSnap(currentPos.z - cursorOffset.z + cellSize / 2, sz);
+        const baseX = cellSnap(currentPos.x - cursorOffset.x + cellSize/ 2, sx);
+        const baseZ = cellSnap(currentPos.z - cursorOffset.z + cellSize/ 2, sz);
 
 		// Convert world coordinates to grid indices
         const ix0 = worldToIndex(baseX);

@@ -13,7 +13,7 @@ export class Grid {
 
   createPlatform() {
     // BoxGeometry con spessore lungo l’asse Y
-    const thickness = 1; // puoi aumentarlo per una piattaforma più alta
+    const thickness = 1; // per una piattaforma più alta
     const geometry = new THREE.BoxGeometry(this.size, thickness, this.size);
     const material = new THREE.MeshStandardMaterial({
       color: 0xcccccc,
