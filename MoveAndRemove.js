@@ -44,19 +44,23 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
     function onPointerMove(evt) {
         if (!controls.enabled || animating) return;
         const hit = pick(evt);
-        if (hit && hit !== highlighted) {
+        if (hit && hit !== highlighted && !isSupporting(scene, hit)) {
             clearOutline();
             highlighted = hit;
             addOutline(hit);
             renderer.domElement.style.cursor = 'pointer';
         }
-        if (!hit) clearOutline();
+        if (!hit || isSupporting(scene, hit)) clearOutline();
     }
+
 
     function onPointerDown(evt) {
         if (!controls.enabled || animating || evt.button !== 0) return;
         const obj = pick(evt);
         if (!obj) return;
+
+        if (isSupporting(scene, obj)) return; // evita selezione se blocco è critico
+
         evt.preventDefault();
         const type = obj.userData.isWall ? 'cube' : 'house';
         clearOutline();
@@ -65,6 +69,7 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
             scene.remove(obj);
         });
     }
+
 
     function onRightClick(evt) {
         evt.preventDefault();
@@ -86,52 +91,41 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
     function applyGravityAnimated() {
         animating = true;
 
-        function animateFallingBlocks(callback) {
-            const falling = [];
+        // Raccogli tutti i blocchi ordinati per altezza crescente
+        const blocks = [];
+        scene.traverse(o => {
+            if (o.userData?.isWall || o.userData?.isHouse) blocks.push(o);
+        });
+        blocks.sort((a, b) => a.position.y - b.position.y);  // dal basso verso l’alto
 
-            scene.traverse(obj => {
-                if (obj.userData?.isWall || obj.userData?.isHouse) {
-                    const spans = obj.userData.isWall ? { sx: 1, sz: 1 } : getRotatedSpans(obj);
-                    const targetY = computeTargetY(scene, obj, spans);
-                    const dy = obj.position.y - targetY;
-                    if (dy > 0.01) {
-                        falling.push({ obj, targetY });
-                    }
-                }
-            });
-
-            if (falling.length === 0) {
-                callback?.();
+        // Funzione ricorsiva che fa cadere un blocco per volta
+        function dropBlock(i = 0) {
+            if (i >= blocks.length) {
+                dragManager.updateHeightMapFromScene();
+                animating = false;
                 return;
             }
 
-            function step() {
-                let allDone = true;
-                for (const { obj, targetY } of falling) {
-                    const dy = obj.position.y - targetY;
-                    if (dy > 0.01) {
-                        obj.position.y -= Math.min(0.2, dy);
-                        allDone = false;
-                    } else {
-                        obj.position.y = targetY;
-                    }
-                }
+            const obj   = blocks[i];
+            const spans = obj.userData.isWall ? { sx: 1, sz: 1 } : getRotatedSpans(obj);
+            const targetY  = computeTargetY(scene, obj, spans);
+            const distance = obj.position.y - targetY;
+            const step     = 0.2;
 
-                if (!allDone) {
-                    requestAnimationFrame(step);
-                } else {
-                    animateFallingBlocks(callback);
-                }
+            if (distance > step) {
+                obj.position.y -= step;
+                requestAnimationFrame(() => dropBlock(i));       // continua sullo stesso blocco
+            } else {
+                obj.position.y = targetY;                        
+                requestAnimationFrame(() => dropBlock(i + 1));   // passa al successivo
             }
-
-            step();
         }
 
-        animateFallingBlocks(() => {
-            dragManager?.updateHeightMapFromScene();
-            animating = false;
-        });
+
+        dropBlock();  // inizia da i=0
     }
+
+
 
     const canvas = renderer.domElement;
     canvas.addEventListener('pointermove', onPointerMove);

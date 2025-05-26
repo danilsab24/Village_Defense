@@ -161,40 +161,26 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 	  cells - Array of grid cells to check {ix, iz}
 	  return -> Reference height if placement is valid, null otherwise
 	 */
-	function canPlace(cells) {
+	function canPlace(cells, objType) {
 		let refHeight = null;
 		let valid = true;
 
-		// Compute grid bounds 
-		const halfDiv = grid.divisions / 2; 
-		const minIndex = -halfDiv; 
-		const maxIndex = halfDiv;  
-
-		for (const c of cells) {
-			// check if the cell is within grid bounds
-			if (c.ix < minIndex || c.ix > maxIndex || c.iz < minIndex || c.iz > maxIndex) {
-				valid = false;
-				break;
-			}
-
-			// Check for height data in the height map
+		// Per le case: tutti i supporti devono essere muri alla stessa altezza
+		cells.forEach(c => {
 			const entry = heightMap.get(mapKey(c.ix, c.iz));
 			const currentTop = entry ? entry.top : 'ground';
 			const currentH = entry ? entry.height : 0;
 
-			if (currentTop === 'house') {   
-				valid = false;
-				break;
+			if (objType === 'house') {
+				if (currentTop !== 'wall') valid = false; // Solo muri come supporto
+				if (c.ix < -5 || c.ix > 5 || c.iz < -5 || c.iz > 5) valid = false; // Limite griglia
 			}
 
-			if (refHeight === null) {
-				refHeight = currentH;
-			} else if (Math.abs(currentH - refHeight) > 0.01) {
-				valid = false;
-				break;
-			}
-		}
-		return valid ? (refHeight ?? 0) : null;
+			if (refHeight === null) refHeight = currentH;
+			else if (Math.abs(currentH - refHeight) > 0.01) valid = false;
+		});
+
+		return valid ? refHeight : null;
 	}
 
     // Drag and drop functions
