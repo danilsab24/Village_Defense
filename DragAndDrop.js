@@ -137,15 +137,24 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 				const pos = obj.position;
 				const { sx, sz } = getSpans(obj);
 
-				// Convert world position to grid indices
+				//Calcola l'altezza attuale del blocco
+				const bbox = new THREE.Box3().setFromObject(obj);
+				const size = new THREE.Vector3();
+				bbox.getSize(size);
+				const topHeight = pos.y + size.y / 2;
+
+				// Salva nella mesh per uso futuro
+				obj.userData.topHeight = topHeight;
+
 				const ix0 = worldToIndex(pos.x);
 				const iz0 = worldToIndex(pos.z);
 				const cells = cellsCovered(ix0, iz0, sx, sz);
-				
-				updateHeightMap(cells, obj.userData.topHeight, type);
+
+				updateHeightMap(cells, topHeight, type);
 			}
 		});
 	}
+
 
 	/*
 	  Checks if an object can be placed in the specified grid cells
@@ -368,7 +377,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         return mesh;
     }
 
-    return { startDrag };
+    return { startDrag,updateHeightMapFromScene };
 }
 
-export { setupDragAndDrop };
+export { setupDragAndDrop  };
