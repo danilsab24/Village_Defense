@@ -75,7 +75,6 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
         evt.preventDefault();
         const obj = pick(evt);
         if (!obj) return;
-
         if (isSupporting(scene, obj)) {
             console.warn("Blocco non rimuovibile: supporta altri oggetti.");
             return;
@@ -83,46 +82,67 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
 
         scene.remove(obj);
         clearOutline();
-        requestAnimationFrame(() => {
-            applyGravityAnimated();
-        });
+        // passo l'oggetto rimosso a applyGravityAnimated
+        requestAnimationFrame(() => applyGravityAnimated(obj));
     }
 
-    function applyGravityAnimated() {
+    function applyGravityAnimated(removed) {
         animating = true;
 
-        // Raccogli tutti i blocchi ordinati per altezza crescente
-        const blocks = [];
-        scene.traverse(o => {
-            if (o.userData?.isWall || o.userData?.isHouse) blocks.push(o);
-        });
-        blocks.sort((a, b) => a.position.y - b.position.y);  // dal basso verso l’alto
+        const cellSize = 1;
+        // calcolo span e celle del blocco rimosso
+        const spansRem = removed.userData.isWall
+            ? { sx: 1, sz: 1 }
+            : getRotatedSpans(removed);
+        const ixRem = Math.floor(removed.position.x / cellSize + 0.5);
+        const izRem = Math.floor(removed.position.z / cellSize + 0.5);
 
-        // Funzione ricorsiva che fa cadere un blocco per volta
-        function dropBlock(i = 0) {
-            if (i >= blocks.length) {
+        const cellsRem = [];
+        for (let dx = 0; dx < spansRem.sx; dx++) {
+            for (let dz = 0; dz < spansRem.sz; dz++) {
+                cellsRem.push({
+                    x: ixRem - Math.floor((spansRem.sx - 1) / 2) + dx,
+                    z: izRem - Math.floor((spansRem.sz - 1) / 2) + dz
+                });
+            }
+        }
+
+        // seleziona solo i muri sopra la colonna del removed
+        const candidates = [];
+        scene.traverse(o => {
+            if (!o.userData?.isWall) return;
+            if (o.position.y <= removed.position.y) return;
+
+            const ix = Math.floor(o.position.x / cellSize + 0.5);
+            const iz = Math.floor(o.position.z / cellSize + 0.5);
+            if (cellsRem.some(c => c.x === ix && c.z === iz)) {
+                candidates.push(o);
+            }
+        });
+
+        // ordina dal più basso al più alto
+        candidates.sort((a, b) => a.position.y - b.position.y);
+
+        // animazione sequenziale
+        (function drop(i = 0) {
+            if (i >= candidates.length) {
                 dragManager.updateHeightMapFromScene();
                 animating = false;
                 return;
             }
+            const obj     = candidates[i];
+            const targetY = computeTargetY(scene, obj, { sx: 1, sz: 1 });
+            const step    = 0.2;
+            const dist    = obj.position.y - targetY;
 
-            const obj   = blocks[i];
-            const spans = obj.userData.isWall ? { sx: 1, sz: 1 } : getRotatedSpans(obj);
-            const targetY  = computeTargetY(scene, obj, spans);
-            const distance = obj.position.y - targetY;
-            const step     = 0.2;
-
-            if (distance > step) {
+            if (dist > step) {
                 obj.position.y -= step;
-                requestAnimationFrame(() => dropBlock(i));       // continua sullo stesso blocco
+                requestAnimationFrame(() => drop(i));
             } else {
-                obj.position.y = targetY;                        
-                requestAnimationFrame(() => dropBlock(i + 1));   // passa al successivo
+                obj.position.y = targetY;
+                requestAnimationFrame(() => drop(i + 1));
             }
-        }
-
-
-        dropBlock();  // inizia da i=0
+        })();
     }
 
 
