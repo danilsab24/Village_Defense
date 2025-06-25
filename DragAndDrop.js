@@ -24,23 +24,19 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 
     function cellSnap(worldCoord, span) {
         if (span % 2 === 1) {
+            // Per blocchi 1x1: aggancia il centro al centro della cella
             const index = Math.floor(worldCoord / cellSize);
             return index * cellSize + (cellSize / 2);
         } else {
+            // Per blocchi 2x2: aggancia il centro all'incrocio delle linee della griglia
             const index = Math.round(worldCoord / cellSize);
             return index * cellSize;
         }
     }
     
     function getSpans(obj) {
-        if (obj.userData?.type === 'house') return { sx: 2, sz: 2 };
+        if (obj.userData?.type?.startsWith('house')) return { sx: 2, sz: 2 };
         if (obj.userData?.type === 'cube' || obj.userData?.type === 'strong') return { sx: 1, sz: 1 };
-        
-        const rotationSteps = Math.round(obj.rotation.y / (Math.PI / 2)) % 4;
-        const isRotated = rotationSteps % 2 !== 0;
-        if (obj.userData?.type === 'box') {
-             return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
-        }
         return { sx: 1, sz: 1 };
     }
     
@@ -77,10 +73,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
             else if (obj.userData.isWall) topType = 'wall';
 
             covered.forEach(({ ix, iz }) => {
-                heightMap.set(mapKey(ix, iz), {
-                    top: topType,
-                    h: topH
-                });
+                heightMap.set(mapKey(ix, iz), { top: topType, h: topH });
             });
         });
     }
@@ -96,6 +89,9 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
             const surfaceType = entry?.top ?? 'ground';
             const surfaceHeight = entry?.h ?? 0;
             
+            // Se una qualsiasi delle celle che vogliamo occupare è già di tipo 'house',
+            // il posizionamento non è valido. Questo impedisce sia di costruire sopra una casa,
+            // sia di compenetrarla.
             if (surfaceType === 'house') return null;
 
             if (baseHeight === null) {
@@ -107,7 +103,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
             supportSurfaces.push(surfaceType);
         }
 
-        if (objType === 'house') {
+        if (objType.startsWith('house')) {
             const allSupportsAreValid = supportSurfaces.every(s => s === 'ground' || s === 'wall' || s === 'strong');
             if (!allSupportsAreValid) return null;
         }
@@ -115,16 +111,20 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         return baseHeight;
     }
 
+
     function createPreviewMesh(type) {
         let geom;
-        if (type === 'house') {
-            geom = new THREE.BoxGeometry(cellSize * 2, 1.5, cellSize * 2); 
+        if (type.startsWith('house_h')) {
+            // Estraiamo l'altezza dal nome del tipo (es. 'house_h4' -> 4)
+            const height = parseInt(type.split('_h')[1], 10);
+            geom = new THREE.BoxGeometry(cellSize * 2, height, cellSize * 2); 
         } else {
+            // Logica per Wall e StrongBlock rimane invariata
             geom = new THREE.BoxGeometry(cellSize, 1, cellSize);
         }
 
         const mat = new THREE.MeshStandardMaterial({
-            color: type === 'house' ? 0x2196f3 : (type === 'strong' ? 0xffa500 : 0x4caf50),
+            color: type.startsWith('house') ? 0x2196f3 : (type === 'strong' ? 0xffa500 : 0x4caf50),
             transparent: true,
             opacity: 0.7
         });
@@ -208,39 +208,44 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 
     function placeOrCancel() {
         if (!dragObject) return;
-        
+
+        // Ottiene le informazioni di posizionamento dall'oggetto di anteprima
         const { sx, sz } = getSpans(dragObject);
         const ix0 = worldToIx(lastSnappedX);
         const iz0 = worldToIz(lastSnappedZ);
         const cells = cellsCovered(ix0, iz0, sx, sz);
         const objType = dragObject.userData.type;
-        const baseH = canPlace(cells, objType);
 
+        // Controlla se la posizione è valida
+        const baseH = canPlace(cells, objType);
         if (baseH === null) {
-            scene.remove(dragObject);
+            scene.remove(dragObject); // Posizione non valida, rimuove l'anteprima
             return;
         }
 
-        const box = new THREE.Box3().setFromObject(dragObject);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const halfH = size.y / 2;
+        // Calcola la posizione finale corretta
+        // L'altezza dell'oggetto è già corretta nell'anteprima (dragObject)
+        const halfH = dragObject.geometry.parameters.height / 2;
         const finalY = baseH + halfH;
         const finalPos = new THREE.Vector3(lastSnappedX, finalY, lastSnappedZ);
 
         let realObj;
-        if (objType === 'cube') {
+        // Crea l'oggetto reale in base al tipo
+        if (objType.startsWith('house_h')) {
+            const height = dragObject.geometry.parameters.height;
+            realObj = new House(scene, finalPos, cellSize, height);
+        } else if (objType === 'cube') {
             realObj = new Wall(scene, finalPos, cellSize);
-        } else if (objType === 'house') {
-            realObj = new House(scene, finalPos, cellSize);
         } else if (objType === 'strong') {
             realObj = new StrongBlock(scene, finalPos, cellSize);
         }
         
+        // Applica la rotazione dell'anteprima all'oggetto finale
         if (realObj) {
             realObj.mesh.rotation.y = dragObject.rotation.y;
         }
         
+        // Pulisce la scena: rimuove l'anteprima e aggiorna la mappa delle altezze
         scene.remove(dragObject);
         updateHeightMapFromScene();
     }

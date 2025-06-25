@@ -6,8 +6,6 @@ function getObjectSpans(obj) {
         return { sx: 1, sz: 1 };
     }
     if (obj.userData?.isHouse) {
-        // MODIFICATO: Una casa 2x2 ha sempre span 2x2, indipendentemente dalla rotazione.
-        // La vecchia logica di rotazione non è più necessaria qui.
         return { sx: 2, sz: 2 }; 
     }
     return { sx: 1, sz: 1 };
@@ -49,7 +47,11 @@ function isPillarSupporting(scene, wall, cellSize, wallMap) {
     const wallCell = cellsCovered(wall.position, {sx: 1, sz: 1}, cellSize)[0];
     scene.traverse(house => {
         if (isDirectSupport || !house.userData?.isHouse) return;
-        const wallTopY = wall.position.y + 0.5;
+
+        // --- CORREZIONE ---
+        // Calcola l'altezza superiore del muro dinamicamente dalla sua geometria,
+        // invece di usare un valore fisso "0.5".
+        const wallTopY = wall.position.y + (wall.geometry.parameters.height / 2);
         const houseBottomY = house.position.y - (house.geometry.parameters.height / 2);
 
         if (Math.abs(wallTopY - houseBottomY) < 0.1) {
@@ -115,7 +117,6 @@ export function computeTargetY(scene, obj, spans, cellSize) {
     let maxBelowY = -Infinity;
 
     scene.traverse(other => {
-        // MODIFICATO: Aggiunto isStrongBlock
         if (other === obj || (!other.userData?.isWall && !other.userData?.isHouse && !other.userData?.isStrongBlock)) return;
 
         const otherSpans = getObjectSpans(other);
@@ -123,7 +124,6 @@ export function computeTargetY(scene, obj, spans, cellSize) {
         const isOverlapping = objCells.some(c1 => otherCells.some(c2 => c1.ix === c2.ix && c1.iz === c2.iz));
 
         if (isOverlapping) {
-            // MODIFICATO: La topY viene calcolata dinamicamente dalla geometria, il che è più robusto
             const otherTopY = other.position.y + (other.geometry.parameters.height / 2);
             if (otherTopY < obj.position.y) {
                 maxBelowY = Math.max(maxBelowY, otherTopY);

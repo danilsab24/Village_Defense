@@ -122,11 +122,12 @@ function initUI(){
 	});
 }
 
+
 function initPreviewCanvas(c){
-	const t = c.dataset.type; // 'house', 'cube', o 'strong'
+	const t = c.dataset.type; // 'house_h2', 'cube', 'strong', etc.
 	const s = new THREE.Scene();
 	const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-	cam.position.set(2.5, 2.5, 2.5); // Allontano un po' la camera per inquadrare meglio la casa 2x2
+	cam.position.set(2.5, 2.5, 2.5);
 	cam.lookAt(0, 0, 0);
 	const ren = new THREE.WebGLRenderer({ canvas: c, alpha: true });
 	ren.setSize(c.clientWidth, c.clientHeight);
@@ -137,21 +138,22 @@ function initPreviewCanvas(c){
 	s.add(dirLight);
 
 	let mesh;
-    // MODIFICATO: Logica di creazione mesh per i 3 tipi
-	switch (t) {
-        case 'house':
-            // Geometria 2x1.5x2 per l'anteprima della casa
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), new THREE.MeshStandardMaterial({ color: 0x2196f3 }));
-            break;
-        case 'strong':
-            // Geometria 1x1x1 per lo strong block arancione
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xffa500 }));
-            break;
-        case 'cube':
-        default:
-            // Geometria 1x1x1 per il muro
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x4caf50 }));
-            break;
+    // MODIFICATO: Aggiungiamo la logica per creare le anteprime delle case
+	if (t.startsWith('house_h')) {
+        const height = parseInt(t.split('_h')[1], 10);
+        // Adattiamo la camera per inquadrare bene anche le case più alte
+        cam.position.set(height * 1.5, height * 1.5, height * 1.5);
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, height, 2), new THREE.MeshStandardMaterial({ color: 0x2196f3 }));
+    } else {
+        switch (t) {
+            case 'strong':
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xffa500 }));
+                break;
+            case 'cube':
+            default:
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x4caf50 }));
+                break;
+        }
     }
     
 	s.add(mesh);
@@ -164,9 +166,3 @@ function initPreviewCanvas(c){
 
 	c.addEventListener('pointerdown', e => dragManager.startDrag(t, e));
 }
-
-window.addEventListener('resize', () => {
-	camera.aspect = window.innerWidth / window.innerHeight;
-	camera.updateProjectionMatrix();
-	renderer.setSize(window.innerWidth, window.innerHeight);
-});
