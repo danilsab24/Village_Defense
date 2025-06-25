@@ -2,27 +2,27 @@ import * as THREE from 'https://esm.sh/three@0.150.1';
 
 // Funzione ausiliaria per ottenere le dimensioni di un oggetto
 function getObjectSpans(obj) {
-    if (obj.userData?.isWall) {
+    if (obj.userData?.isWall || obj.userData?.isStrongBlock) {
         return { sx: 1, sz: 1 };
     }
     if (obj.userData?.isHouse) {
-        const rotationSteps = Math.round(obj.rotation.y / (Math.PI / 2)) % 4;
-        const isRotated = rotationSteps % 2 !== 0;
-        return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+        // MODIFICATO: Una casa 2x2 ha sempre span 2x2, indipendentemente dalla rotazione.
+        // La vecchia logica di rotazione non è più necessaria qui.
+        return { sx: 2, sz: 2 }; 
     }
     return { sx: 1, sz: 1 };
 }
 
-export { getObjectSpans as getRotatedSpans };
+export { getObjectSpans };
 
 // Funzione ausiliaria per calcolare le celle coperte da un oggetto
 function cellsCovered(position, spans, cellSize) {
     const cells = [];
     let startX, startZ;
 
-    if (spans.sx % 2 === 1) { // Oggetti con centro nella cella (es. Wall)
+    if (spans.sx % 2 === 1) { // Oggetti con centro nella cella (es. Wall, StrongBlock)
         startX = Math.floor(position.x / cellSize);
-    } else { // Oggetti con centro sul bordo (es. House)
+    } else { // Oggetti con centro sul bordo (es. House 2x2)
         startX = Math.round(position.x / cellSize) - spans.sx / 2;
     }
 
@@ -90,12 +90,11 @@ function isPillarSupporting(scene, wall, cellSize, wallMap) {
  * Calcola se un blocco 'wall' fa parte di un pilastro che supporta una 'house'.
  */
 export function isSupporting(scene, obj, cellSize) {
-    if (!obj.userData?.isWall) return false;
+    if (!obj.userData?.isWall && !obj.userData?.isStrongBlock) return false;
     
-    // Creiamo una mappa di tutti i muri per passarla alla funzione ricorsiva
     const wallMap = new Map();
     scene.traverse(w => {
-        if (w.userData?.isWall) {
+        if (w.userData?.isWall || w.userData?.isStrongBlock) { // Aggiunto isStrongBlock
             wallMap.set(w.uuid, w);
         }
     });
@@ -116,13 +115,15 @@ export function computeTargetY(scene, obj, spans, cellSize) {
     let maxBelowY = -Infinity;
 
     scene.traverse(other => {
-        if (other === obj || (!other.userData?.isWall && !other.userData?.isHouse)) return;
+        // MODIFICATO: Aggiunto isStrongBlock
+        if (other === obj || (!other.userData?.isWall && !other.userData?.isHouse && !other.userData?.isStrongBlock)) return;
 
         const otherSpans = getObjectSpans(other);
         const otherCells = cellsCovered(other.position, otherSpans, cellSize);
         const isOverlapping = objCells.some(c1 => otherCells.some(c2 => c1.ix === c2.ix && c1.iz === c2.iz));
 
         if (isOverlapping) {
+            // MODIFICATO: La topY viene calcolata dinamicamente dalla geometria, il che è più robusto
             const otherTopY = other.position.y + (other.geometry.parameters.height / 2);
             if (otherTopY < obj.position.y) {
                 maxBelowY = Math.max(maxBelowY, otherTopY);

@@ -41,7 +41,9 @@ canvas {
 }
 
 .preview {
-  width: 100%;
+  width: 90%; /* Ridotto per permettere la centratura */
+  margin-left: auto; /* Aggiunto per centrare */
+  margin-right: auto; /* Aggiunto per centrare */
   height: 100px;
   min-height: 100px;
   background: #1e1f21;
@@ -92,7 +94,7 @@ canvas {
   display: none;
   flex-direction: column;
   gap: 5px;
-  margin-left: 10px;
+  margin-top: 5px; /* Aggiunto per spaziatura verticale */
   margin-bottom: 10px;
 }
 

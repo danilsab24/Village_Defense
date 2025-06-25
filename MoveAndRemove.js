@@ -1,5 +1,5 @@
 import * as THREE from 'https://esm.sh/three@0.150.1';
-import { isSupporting, computeTargetY, getRotatedSpans } from './Gravity.js';
+import { isSupporting, computeTargetY, getObjectSpans } from './Gravity.js';
 
 function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, grid }) {
     const raycaster = new THREE.Raycaster();
@@ -15,7 +15,7 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
         raycaster.setFromCamera(mouse, camera);
         const pickables = [];
         scene.traverse(o => {
-            if (o.userData?.isWall || o.userData?.isHouse) pickables.push(o);
+            if (o.userData?.isWall || o.userData?.isHouse || o.userData?.isStrongBlock) pickables.push(o);
         });
         return raycaster.intersectObjects(pickables, false)[0]?.object ?? null;
     }
@@ -46,7 +46,6 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
     function onPointerMove(evt) {
         if (!controls.enabled || animating) return;
         const hit = pick(evt);
-
         
         if (hit && hit !== highlighted && !isSupporting(scene, hit, cellSize)) {
             clearOutline();
@@ -58,23 +57,23 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
         if (!hit || isSupporting(scene, hit, cellSize)) clearOutline();
     }
 
-
     function onPointerDown(evt) {
         if (!controls.enabled || animating || evt.button !== 0) return;
         const obj = pick(evt);
         if (!obj) return;
 
-        if (isSupporting(scene, obj, cellSize)) return; // evita selezione se blocco è critico
+        if (isSupporting(scene, obj, cellSize)) return;
 
         evt.preventDefault();
-        const type = obj.userData.isWall ? 'cube' : 'house';
-        clearOutline();
-        dragManager.startDrag(type, evt);
-        requestAnimationFrame(() => {
-            scene.remove(obj);
-        });
-    }
+        
+        const type = obj.userData.type;
 
+        clearOutline();
+        
+        scene.remove(obj);
+        
+        dragManager.startDrag(type, evt);
+    }
 
     function onRightClick(evt) {
         evt.preventDefault();
@@ -93,11 +92,8 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
 
     function applyGravityAnimated(removed) {
         animating = true;
-
         
-        const spansRem = removed.userData.isWall
-            ? { sx: 1, sz: 1 }
-            : getRotatedSpans(removed);
+        const spansRem = getObjectSpans(removed);
         const ixRem = Math.round(removed.position.x / cellSize);
         const izRem = Math.round(removed.position.z / cellSize);
 
@@ -113,7 +109,7 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
 
         const candidates = [];
         scene.traverse(o => {
-            if (!o.userData?.isWall) return;
+            if (!o.userData?.isWall && !o.userData?.isStrongBlock) return;
             if (o.position.y <= removed.position.y) return;
 
             const ix = Math.round(o.position.x / cellSize);
@@ -132,7 +128,7 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, gr
                 return;
             }
             const obj = candidates[i];
-            const targetY = computeTargetY(scene, obj, { sx: 1, sz: 1 }, cellSize);
+            const targetY = computeTargetY(scene, obj, getObjectSpans(obj), cellSize);
             const step = 0.2;
             const dist = obj.position.y - targetY;
 

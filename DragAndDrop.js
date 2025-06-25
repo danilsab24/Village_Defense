@@ -1,7 +1,8 @@
-// DragAndDrop.js - VERSIONE DEFINITIVA DI DEBUG
+// DragAndDrop.js - VERSIONE CORRETTA
 import * as THREE from 'https://esm.sh/three@0.150.1';
 import { Wall } from './wall.js';
 import { House } from './village.js';
+import { StrongBlock } from './StrongBlock.js';
 
 function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
 
@@ -31,16 +32,16 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         }
     }
     
-    function getRotatedSpans(obj) {
+    function getSpans(obj) {
+        if (obj.userData?.type === 'house') return { sx: 2, sz: 2 };
+        if (obj.userData?.type === 'cube' || obj.userData?.type === 'strong') return { sx: 1, sz: 1 };
+        
         const rotationSteps = Math.round(obj.rotation.y / (Math.PI / 2)) % 4;
         const isRotated = rotationSteps % 2 !== 0;
-        return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
-    }
-
-    function getSpans(obj) {
-        if (obj.userData?.isWall) return { sx: 1, sz: 1 };
-        if (obj.userData?.isHouse) return getRotatedSpans(obj);
-        return obj.userData?.type === 'cube' ? { sx: 1, sz: 1 } : getRotatedSpans(obj);
+        if (obj.userData?.type === 'box') {
+             return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+        }
+        return { sx: 1, sz: 1 };
     }
     
     function cellsCovered(ix0, iz0, sx, sz) {
@@ -58,7 +59,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
     function updateHeightMapFromScene() {
         heightMap.clear();
         scene.traverse(obj => {
-            if (!obj.userData?.isWall && !obj.userData?.isHouse) return;
+            if (!obj.userData?.isWall && !obj.userData?.isHouse && !obj.userData?.isStrongBlock) return;
 
             const spans = getSpans(obj);
             const ix0 = worldToIx(obj.position.x);
@@ -70,9 +71,14 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
             box.getSize(size);
             const topH = obj.position.y + size.y / 2;
 
+            let topType = 'ground';
+            if (obj.userData.isHouse) topType = 'house';
+            else if (obj.userData.isStrongBlock) topType = 'strong';
+            else if (obj.userData.isWall) topType = 'wall';
+
             covered.forEach(({ ix, iz }) => {
                 heightMap.set(mapKey(ix, iz), {
-                    top: obj.userData.isHouse ? 'house' : 'wall',
+                    top: topType,
                     h: topH
                 });
             });
@@ -102,25 +108,28 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         }
 
         if (objType === 'house') {
-            const onGround = supportSurfaces.every(s => s === 'ground');
-            const onWalls = supportSurfaces.every(s => s === 'wall');
-            if (!onGround && !onWalls) return null;
+            const allSupportsAreValid = supportSurfaces.every(s => s === 'ground' || s === 'wall' || s === 'strong');
+            if (!allSupportsAreValid) return null;
         }
 
         return baseHeight;
     }
 
     function createPreviewMesh(type) {
-        const geom = type === 'cube'
-            ? new THREE.BoxGeometry(cellSize, 1, cellSize)
-            : new THREE.BoxGeometry(cellSize * 2, 0.75, cellSize);
+        let geom;
+        if (type === 'house') {
+            geom = new THREE.BoxGeometry(cellSize * 2, 1.5, cellSize * 2); 
+        } else {
+            geom = new THREE.BoxGeometry(cellSize, 1, cellSize);
+        }
+
         const mat = new THREE.MeshStandardMaterial({
-            color: type === 'cube' ? 0x4caf50 : 0x2196f3,
+            color: type === 'house' ? 0x2196f3 : (type === 'strong' ? 0xffa500 : 0x4caf50),
             transparent: true,
             opacity: 0.7
         });
         const mesh = new THREE.Mesh(geom, mat);
-        mesh.userData.type = type === 'cube' ? 'cube' : 'house';
+        mesh.userData.type = type;
         return mesh;
     }
 
@@ -156,7 +165,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         const ix0 = worldToIx(snappedX);
         const iz0 = worldToIz(snappedZ);
         const cells = cellsCovered(ix0, iz0, sx, sz);
-        const objType = dragObject.userData.type === 'cube' ? 'wall' : 'house';
+        const objType = dragObject.userData.type;
         const baseH = canPlace(cells, objType);
 
         const box = new THREE.Box3().setFromObject(dragObject);
@@ -168,7 +177,12 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
             dragObject.material.color.set(0xff4444);
             dragObject.position.set(snappedX, grid.getPlaneMesh().position.y + halfH, snappedZ);
         } else {
-            dragObject.material.color.set(objType === 'wall' ? 0x4caf50 : 0x2196f3);
+            const correctColor = objType === 'cube' 
+                ? 0x4caf50  // Verde per Wall ('cube')
+                : (objType === 'strong' 
+                    ? 0xffa500 // Arancione per StrongBlock
+                    : 0x2196f3); // Blu per House
+            dragObject.material.color.set(correctColor);
             dragObject.position.set(snappedX, baseH + halfH, snappedZ);
         }
     }
@@ -177,7 +191,9 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         if (!dragObject || evt.code !== 'Space') return;
         evt.preventDefault();
         dragObject.rotation.y += Math.PI / 2;
-        if (currentPos) updateDragPosition(evt); 
+        // Ricrea un evento fittizio per forzare l'aggiornamento della posizione
+        const fakeEvt = { clientX: mouse.x, clientY: mouse.y }; 
+        if (currentPos) updateDragPosition(fakeEvt); 
     }
 
     function finishDrag() {
@@ -197,7 +213,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         const ix0 = worldToIx(lastSnappedX);
         const iz0 = worldToIz(lastSnappedZ);
         const cells = cellsCovered(ix0, iz0, sx, sz);
-        const objType = dragObject.userData.type === 'cube' ? 'wall' : 'house';
+        const objType = dragObject.userData.type;
         const baseH = canPlace(cells, objType);
 
         if (baseH === null) {
@@ -210,14 +226,20 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
         box.getSize(size);
         const halfH = size.y / 2;
         const finalY = baseH + halfH;
+        const finalPos = new THREE.Vector3(lastSnappedX, finalY, lastSnappedZ);
 
         let realObj;
-        if (objType === 'wall') {
-            realObj = new Wall(scene, new THREE.Vector3(lastSnappedX, finalY, lastSnappedZ), cellSize);
-        } else {
-            realObj = new House(scene, new THREE.Vector3(lastSnappedX, finalY, lastSnappedZ), cellSize);
+        if (objType === 'cube') {
+            realObj = new Wall(scene, finalPos, cellSize);
+        } else if (objType === 'house') {
+            realObj = new House(scene, finalPos, cellSize);
+        } else if (objType === 'strong') {
+            realObj = new StrongBlock(scene, finalPos, cellSize);
         }
-        realObj.mesh.rotation.y = dragObject.rotation.y;
+        
+        if (realObj) {
+            realObj.mesh.rotation.y = dragObject.rotation.y;
+        }
         
         scene.remove(dragObject);
         updateHeightMapFromScene();
