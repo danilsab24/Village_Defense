@@ -1,117 +1,137 @@
 import * as THREE from 'https://esm.sh/three@0.150.1';
 
-/**
- * Calcola se un blocco supporta altri oggetti sopra di sé
- */
-// helper function
-function cellsCovered(ix, iz, sx, sz) {
-    const startX = ix - Math.floor((sx - 1) / 2);
-    const startZ = iz - Math.floor((sz - 1) / 2);
+// Funzione ausiliaria per ottenere le dimensioni di un oggetto
+function getObjectSpans(obj) {
+    if (obj.userData?.isWall) {
+        return { sx: 1, sz: 1 };
+    }
+    if (obj.userData?.isHouse) {
+        const rotationSteps = Math.round(obj.rotation.y / (Math.PI / 2)) % 4;
+        const isRotated = rotationSteps % 2 !== 0;
+        return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+    }
+    return { sx: 1, sz: 1 };
+}
+
+export { getObjectSpans as getRotatedSpans };
+
+// Funzione ausiliaria per calcolare le celle coperte da un oggetto
+function cellsCovered(position, spans, cellSize) {
     const cells = [];
-    for (let dx = 0; dx < sx; dx++) {
-        for (let dz = 0; dz < sz; dz++) {
+    let startX, startZ;
+
+    if (spans.sx % 2 === 1) { // Oggetti con centro nella cella (es. Wall)
+        startX = Math.floor(position.x / cellSize);
+    } else { // Oggetti con centro sul bordo (es. House)
+        startX = Math.round(position.x / cellSize) - spans.sx / 2;
+    }
+
+    if (spans.sz % 2 === 1) {
+        startZ = Math.floor(position.z / cellSize);
+    } else {
+        startZ = Math.round(position.z / cellSize) - spans.sz / 2;
+    }
+    
+    for (let dx = 0; dx < spans.sx; dx++) {
+        for (let dz = 0; dz < spans.sz; dz++) {
             cells.push({ ix: startX + dx, iz: startZ + dz });
         }
     }
     return cells;
 }
 
-export function isSupporting(scene, obj) {
-    if (!obj.userData?.isWall) return false;
+// Funzione ricorsiva che controlla l'intera colonna
+function isPillarSupporting(scene, wall, cellSize, wallMap) {
+    if (!wall) return false;
 
-    // Verifica se supporta case
-    let isCritical = false;
-    const cellSize = 1; // Assumendo griglia 1x1
+    // Controlla se il muro corrente supporta direttamente una casa
+    let isDirectSupport = false;
+    const wallCell = cellsCovered(wall.position, {sx: 1, sz: 1}, cellSize)[0];
+    scene.traverse(house => {
+        if (isDirectSupport || !house.userData?.isHouse) return;
+        const wallTopY = wall.position.y + 0.5;
+        const houseBottomY = house.position.y - (house.geometry.parameters.height / 2);
 
-    scene.traverse(other => {
-        if (!other.userData?.isHouse) return;
-
-        // Calcola celle coperte dalla casa
-        const spans = getRotatedSpans(other);
-        const ix = Math.floor(other.position.x / cellSize + 0.5);
-        const iz = Math.floor(other.position.z / cellSize + 0.5);
-        const cells = cellsCovered(ix, iz, spans.sx, spans.sz);
-
-        // Conta quanti muri stanno supportando la casa
-        let supportCount = 0;
-        cells.forEach(({ix, iz}) => {
-            scene.traverse(wall => {
-                if (!wall.userData?.isWall) return;
-                const wx = Math.floor(wall.position.x / cellSize + 0.5);
-                const wz = Math.floor(wall.position.z / cellSize + 0.5);
-                if (wx === ix && wz === iz) {
-                    supportCount++;
-                }
-            });
-        });
-
-        // Se il muro è uno degli unici due supporti, non può essere rimosso
-        const wx = Math.floor(obj.position.x / cellSize + 0.5);
-        const wz = Math.floor(obj.position.z / cellSize + 0.5);
-        if (cells.some(c => c.ix === wx && c.iz === wz) && supportCount <= 2) {
-            isCritical = true;
+        if (Math.abs(wallTopY - houseBottomY) < 0.1) {
+            const houseSpans = getObjectSpans(house);
+            const houseCells = cellsCovered(house.position, houseSpans, cellSize);
+            if (houseCells.some(c => c.ix === wallCell.ix && c.iz === wallCell.iz)) {
+                isDirectSupport = true;
+            }
         }
     });
 
-    return isCritical;
-}
+    if (isDirectSupport) return true;
 
-// Gravity.js
-export function computeTargetY(scene, obj, spans) {
-    const box  = new THREE.Box3().setFromObject(obj);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const halfH = size.y / 2;
-
-    const cellSize = 1;
-    const ix = Math.floor(obj.position.x / cellSize + 0.5);
-    const iz = Math.floor(obj.position.z / cellSize + 0.5);
-
-    const startX = ix - Math.floor((spans.sx - 1) / 2);
-    const startZ = iz - Math.floor((spans.sz - 1) / 2);
-
-    // celle coperte dall’oggetto
-    const cells = [];
-    for (let dx = 0; dx < spans.sx; dx++) {
-        for (let dz = 0; dz < spans.sz; dz++) {
-            cells.push({ x: startX + dx, z: startZ + dz });
+    // Se non è un supporto diretto, cerca un muro sopra e controlla ricorsivamente
+    const ix = Math.floor(wall.position.x / cellSize);
+    const iz = Math.floor(wall.position.z / cellSize);
+    
+    let wallAbove = null;
+    for (const otherWall of wallMap.values()) {
+        if (otherWall.id === wall.id) continue;
+        const otherIx = Math.floor(otherWall.position.x / cellSize);
+        const otherIz = Math.floor(otherWall.position.z / cellSize);
+        // Controlla se è nella stessa colonna (ix, iz) e 1 unità più in alto
+        if (otherIx === ix && otherIz === iz && Math.abs(otherWall.position.y - (wall.position.y + 1)) < 0.1) {
+            wallAbove = otherWall;
+            break;
         }
     }
 
-    let maxBelowY = -Infinity;
+    if (wallAbove) {
+        return isPillarSupporting(scene, wallAbove, cellSize, wallMap);
+    }
 
-    cells.forEach(cell => {
-        const cx = cell.x * cellSize;
-        const cz = cell.z * cellSize;
+    return false;
+}
 
-        scene.traverse(other => {
-            if (other === obj) return;
-            if (!(other.userData?.isWall || other.userData?.isHouse)) return;
-
-            // deve stare nella stessa colonna (dx/dz ≈ 0)
-            const dx = Math.abs(other.position.x - cx);
-            const dz = Math.abs(other.position.z - cz);
-            if (dx > cellSize / 2 - 0.01 || dz > cellSize / 2 - 0.01) return;
-
-            // --- solo blocchi SOTTO ---
-            const otherBox  = new THREE.Box3().setFromObject(other);
-            const otherSize = new THREE.Vector3();
-            otherBox.getSize(otherSize);
-            const otherTopY = other.position.y + otherSize.y / 2;
-
-            if (otherTopY < obj.position.y - halfH - 0.01) {
-                maxBelowY = Math.max(maxBelowY, otherTopY);
-            }
-        });
+/**
+ * Calcola se un blocco 'wall' fa parte di un pilastro che supporta una 'house'.
+ */
+export function isSupporting(scene, obj, cellSize) {
+    if (!obj.userData?.isWall) return false;
+    
+    // Creiamo una mappa di tutti i muri per passarla alla funzione ricorsiva
+    const wallMap = new Map();
+    scene.traverse(w => {
+        if (w.userData?.isWall) {
+            wallMap.set(w.uuid, w);
+        }
     });
 
-    // se nulla sotto → poggia a terra (y = halfH)
-    return maxBelowY > -Infinity ? maxBelowY + halfH : halfH;
+    return isPillarSupporting(scene, obj, cellSize, wallMap);
 }
 
 
-export function getRotatedSpans(obj) {
-	const rotationSteps = Math.round(obj.rotation.y / (Math.PI / 2));
-	const isRotated = rotationSteps % 2 !== 0;
-	return isRotated ? { sx: 1, sz: 2 } : { sx: 2, sz: 1 };
+/**
+ * Calcola l'altezza Y di destinazione per un oggetto che cade a causa della gravità.
+ */
+export function computeTargetY(scene, obj, spans, cellSize) {
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const halfH = size.y / 2;
+    const objCells = cellsCovered(obj.position, spans, cellSize);
+    let maxBelowY = -Infinity;
+
+    scene.traverse(other => {
+        if (other === obj || (!other.userData?.isWall && !other.userData?.isHouse)) return;
+
+        const otherSpans = getObjectSpans(other);
+        const otherCells = cellsCovered(other.position, otherSpans, cellSize);
+        const isOverlapping = objCells.some(c1 => otherCells.some(c2 => c1.ix === c2.ix && c1.iz === c2.iz));
+
+        if (isOverlapping) {
+            const otherTopY = other.position.y + (other.geometry.parameters.height / 2);
+            if (otherTopY < obj.position.y) {
+                maxBelowY = Math.max(maxBelowY, otherTopY);
+            }
+        }
+    });
+    
+    const groundY = 0;
+    const supportY = maxBelowY > -Infinity ? maxBelowY : groundY;
+    
+    return supportY + halfH;
 }

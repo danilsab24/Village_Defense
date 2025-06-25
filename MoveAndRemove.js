@@ -1,10 +1,12 @@
 import * as THREE from 'https://esm.sh/three@0.150.1';
 import { isSupporting, computeTargetY, getRotatedSpans } from './Gravity.js';
 
-function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) {
+function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager, grid }) {
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let animating = false;
+
+    const cellSize = grid.size / grid.divisions;
 
     function pick(evt) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -44,13 +46,16 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
     function onPointerMove(evt) {
         if (!controls.enabled || animating) return;
         const hit = pick(evt);
-        if (hit && hit !== highlighted && !isSupporting(scene, hit)) {
+
+        
+        if (hit && hit !== highlighted && !isSupporting(scene, hit, cellSize)) {
             clearOutline();
             highlighted = hit;
             addOutline(hit);
             renderer.domElement.style.cursor = 'pointer';
         }
-        if (!hit || isSupporting(scene, hit)) clearOutline();
+       
+        if (!hit || isSupporting(scene, hit, cellSize)) clearOutline();
     }
 
 
@@ -59,7 +64,7 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
         const obj = pick(evt);
         if (!obj) return;
 
-        if (isSupporting(scene, obj)) return; // evita selezione se blocco è critico
+        if (isSupporting(scene, obj, cellSize)) return; // evita selezione se blocco è critico
 
         evt.preventDefault();
         const type = obj.userData.isWall ? 'cube' : 'house';
@@ -75,27 +80,26 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
         evt.preventDefault();
         const obj = pick(evt);
         if (!obj) return;
-        if (isSupporting(scene, obj)) {
+
+        if (isSupporting(scene, obj, cellSize)) {
             console.warn("Blocco non rimuovibile: supporta altri oggetti.");
             return;
         }
 
         scene.remove(obj);
         clearOutline();
-        // passo l'oggetto rimosso a applyGravityAnimated
         requestAnimationFrame(() => applyGravityAnimated(obj));
     }
 
     function applyGravityAnimated(removed) {
         animating = true;
 
-        const cellSize = 1;
-        // calcolo span e celle del blocco rimosso
+        
         const spansRem = removed.userData.isWall
             ? { sx: 1, sz: 1 }
             : getRotatedSpans(removed);
-        const ixRem = Math.floor(removed.position.x / cellSize + 0.5);
-        const izRem = Math.floor(removed.position.z / cellSize + 0.5);
+        const ixRem = Math.round(removed.position.x / cellSize);
+        const izRem = Math.round(removed.position.z / cellSize);
 
         const cellsRem = [];
         for (let dx = 0; dx < spansRem.sx; dx++) {
@@ -107,33 +111,30 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
             }
         }
 
-        // seleziona solo i muri sopra la colonna del removed
         const candidates = [];
         scene.traverse(o => {
             if (!o.userData?.isWall) return;
             if (o.position.y <= removed.position.y) return;
 
-            const ix = Math.floor(o.position.x / cellSize + 0.5);
-            const iz = Math.floor(o.position.z / cellSize + 0.5);
+            const ix = Math.round(o.position.x / cellSize);
+            const iz = Math.round(o.position.z / cellSize);
             if (cellsRem.some(c => c.x === ix && c.z === iz)) {
                 candidates.push(o);
             }
         });
 
-        // ordina dal più basso al più alto
         candidates.sort((a, b) => a.position.y - b.position.y);
 
-        // animazione sequenziale
         (function drop(i = 0) {
             if (i >= candidates.length) {
                 dragManager.updateHeightMapFromScene();
                 animating = false;
                 return;
             }
-            const obj     = candidates[i];
-            const targetY = computeTargetY(scene, obj, { sx: 1, sz: 1 });
-            const step    = 0.2;
-            const dist    = obj.position.y - targetY;
+            const obj = candidates[i];
+            const targetY = computeTargetY(scene, obj, { sx: 1, sz: 1 }, cellSize);
+            const step = 0.2;
+            const dist = obj.position.y - targetY;
 
             if (dist > step) {
                 obj.position.y -= step;
@@ -144,8 +145,6 @@ function setupMoveAndRemove({ scene, camera, renderer, controls, dragManager }) 
             }
         })();
     }
-
-
 
     const canvas = renderer.domElement;
     canvas.addEventListener('pointermove', onPointerMove);

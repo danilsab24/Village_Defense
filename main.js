@@ -39,13 +39,14 @@ function init() {
 	grid = new Grid(scene);
 	dragManager = setupDragAndDrop({ scene, camera, renderer, grid, controls });
 
-	// ⬇️ setup hover, click, double click handlers
+	// setup hover, click, double click handlers
 	moveRemoveManager = setupMoveAndRemove({
 		scene,
 		camera,
 		renderer,
 		controls,
-		dragManager
+		dragManager,
+		grid
 	});
 
 	window.addEventListener('keydown', e => {

@@ -1,5 +1,5 @@
 // grid.js
-import * as THREE from 'https://unpkg.com/three@0.150.1/build/three.module.js';
+import * as THREE from 'https://esm.sh/three@0.150.1';
 
 export class Grid {
   constructor(scene, size = 40, divisions = 30) {
