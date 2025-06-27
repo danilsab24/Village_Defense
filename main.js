@@ -4,6 +4,12 @@ import { OrbitControls } from 'https://esm.sh/three@0.150.1/examples/jsm/control
 import { Grid } from './grid.js';
 import { setupDragAndDrop } from './DragAndDrop.js';
 import { setupMoveAndRemove } from './MoveAndRemove.js';
+// for the texture of WALL and STRONGblock
+import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+
+const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
+
 
 let scene, camera, renderer, controls;
 let grid, dragManager, moveRemoveManager;
@@ -31,10 +37,27 @@ function init() {
 	controls.enableDamping = true;
 	controls.enablePan     = false;
 
-	const mainLight = new THREE.PointLight(0xffffff, 3, 200);
-	mainLight.position.set(50, 20, 0);
-	scene.add(mainLight);
-	scene.add(new THREE.PointLightHelper(mainLight, 2));
+	const lightDistance = 150;
+	const lightHeight = 50;
+	const lightIntensity = 2.5;
+	const lightColor = 0xffffff;
+
+	const lightPositions = [
+	{ x:  0, y: lightHeight, z: -lightDistance }, // Nord (fronte)
+	{ x:  0, y: lightHeight, z:  lightDistance }, // Sud (retro)
+	{ x:  lightDistance, y: lightHeight, z: 0 },  // Est (destra)
+	{ x: -lightDistance, y: lightHeight, z: 0 },  // Ovest (sinistra)
+	];
+
+	lightPositions.forEach((pos, index) => {
+	const light = new THREE.PointLight(lightColor, lightIntensity, 300);
+	light.position.set(pos.x, pos.y, pos.z);
+	scene.add(light);
+
+	// Opzionale: helper visivo per debug
+	const helper = new THREE.PointLightHelper(light, 2);
+	scene.add(helper);
+});
 
 	grid = new Grid(scene);
 	dragManager = setupDragAndDrop({ scene, camera, renderer, grid, controls });
@@ -123,46 +146,76 @@ function initUI(){
 }
 
 
-function initPreviewCanvas(c){
-	const t = c.dataset.type; // 'house_h2', 'cube', 'strong', etc.
-	const s = new THREE.Scene();
-	const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-	cam.position.set(2.5, 2.5, 2.5);
-	cam.lookAt(0, 0, 0);
-	const ren = new THREE.WebGLRenderer({ canvas: c, alpha: true });
-	ren.setSize(c.clientWidth, c.clientHeight);
-	ren.setPixelRatio(window.devicePixelRatio);
+function initPreviewCanvas(c) {
+    const t = c.dataset.type;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, c.clientWidth / c.clientHeight, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer({ canvas: c, alpha: true, antialias: true });
+    renderer.setSize(c.clientWidth, c.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputEncoding = THREE.sRGBEncoding;
 
-	const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-	dirLight.position.set(2, 2, 2);
-	s.add(dirLight);
+    // 1. Illuminazione migliorata
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    dirLight.position.set(5, 10, 7.5);
+    scene.add(dirLight);
 
-	let mesh;
-    // MODIFICATO: Aggiungiamo la logica per creare le anteprime delle case
-	if (t.startsWith('house_h')) {
-        const height = parseInt(t.split('_h')[1], 10);
-        // Adattiamo la camera per inquadrare bene anche le case più alte
-        cam.position.set(height * 1.5, height * 1.5, height * 1.5);
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(2, height, 2), new THREE.MeshStandardMaterial({ color: 0x2196f3 }));
+    let previewObject;
+
+    const frameObject = (target) => {
+        const box = new THREE.Box3().setFromObject(target);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        
+        target.position.sub(center); // Centra l'oggetto nell'origine
+
+        const maxSize = Math.max(size.x, size.y, size.z);
+        const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
+        const fitWidthDistance = fitHeightDistance / camera.aspect;
+        const distance = 0.85 * Math.max(fitHeightDistance, fitWidthDistance);
+
+        camera.position.set(distance, distance, distance);
+        camera.lookAt(0, 0, 0);
+    };
+
+    const startAnimation = () => {
+        (function loop() {
+            if (previewObject) previewObject.rotation.y += 0.01;
+            renderer.render(scene, camera);
+            requestAnimationFrame(loop);
+        })();
+    };
+
+    if (t.startsWith('house_h')) {
+        const height = t.split('_h')[1];
+		const houseModelPaths = {
+			2: 'MODEL/2H_house.glb',
+			4: 'MODEL/4H_house.glb',
+			6: 'MODEL/6H_house.glb'
+		};
+
+		gltfLoader.load(houseModelPaths[height], (gltf) => {
+			previewObject = gltf.scene;
+			scene.add(previewObject);
+			frameObject(previewObject);
+			startAnimation();
+		});
     } else {
-        switch (t) {
-            case 'strong':
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xffa500 }));
-                break;
-            case 'cube':
-            default:
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x4caf50 }));
-                break;
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        let map;
+        if (t === 'cube') {
+            map = textureLoader.load('TEXTURE/DIRT.png');
+        } else if (t === 'strong') {
+            map = textureLoader.load('TEXTURE/STONE.png');
         }
+        const material = new THREE.MeshStandardMaterial({ map: map });
+        previewObject = new THREE.Mesh(geometry, material);
+        scene.add(previewObject);
+        frameObject(previewObject);
+        startAnimation();
     }
-    
-	s.add(mesh);
 
-	(function loop(){
-		mesh.rotation.y += 0.01;
-		ren.render(s, cam);
-		requestAnimationFrame(loop);
-	})();
-
-	c.addEventListener('pointerdown', e => dragManager.startDrag(t, e));
+    c.addEventListener('pointerdown', e => dragManager.startDrag(t, e));
 }

@@ -1,16 +1,21 @@
 import * as THREE from 'https://esm.sh/three@0.150.1';
 
+const textureLoader = new THREE.TextureLoader();
+const strongTexture = textureLoader.load('TEXTURE/STONE.png'); // texture
+
 export class StrongBlock {
   constructor(scene, position, cellSize = 1) {
     const geometry = new THREE.BoxGeometry(cellSize, 1, cellSize);
-    // orange color
-    const material = new THREE.MeshStandardMaterial({ color: 0xffa500 }); 
+
+    const material = new THREE.MeshStandardMaterial({ 
+        map: strongTexture
+    });
+
     this.mesh = new THREE.Mesh(geometry, material);
     
-
     this.mesh.userData = {
-      isStrongBlock: true, // Proprietà specifica
-      isWall: true,        // Lo trattiamo come un muro per la logica di supporto e gravità
+      isStrongBlock: true,
+      isWall: true,
       type: 'strong',   
       topHeight: position.y + 0.5
     };

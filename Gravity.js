@@ -48,9 +48,7 @@ function isPillarSupporting(scene, wall, cellSize, wallMap) {
     scene.traverse(house => {
         if (isDirectSupport || !house.userData?.isHouse) return;
 
-        // --- CORREZIONE ---
-        // Calcola l'altezza superiore del muro dinamicamente dalla sua geometria,
-        // invece di usare un valore fisso "0.5".
+        // Calcola l'altezza superiore del muro dinamicamente dalla sua geometria
         const wallTopY = wall.position.y + (wall.geometry.parameters.height / 2);
         const houseBottomY = house.position.y - (house.geometry.parameters.height / 2);
 

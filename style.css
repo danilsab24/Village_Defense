@@ -8,24 +8,21 @@ canvas {
   display: block;
 }
 
-/* Fixed sidebar on the right */
+/*  Sidebar Styles  */
 #sidebar {
   position: fixed;
-  top: 20px;           /* distance from top */
-  right: 20px;         /* distance from right */
-  width: 180px;
+  top: 20px;
+  right: 20px;
+  width: 200px;
+  max-height: 90vh;              /* Sidebar non cresce oltre 90% altezza finestra */
+  overflow-y: auto;              /* Scroll verticale se necessario */
   background: #2e2f31;
   color: white;
   padding: 10px;
   z-index: 10;
-
-  /* Fully rounded corners */
   border-radius: 15px;
-
-  /* Optional: subtle shadow */
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
-
 
 #sidebar h3 {
   margin-top: 0;
@@ -33,26 +30,21 @@ canvas {
   color: #ffffff;
 }
 
-/* Object selection buttons */
+/*  Palette di oggetti  */
 .palette {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.preview {
-  width: 90%; /* Ridotto per permettere la centratura */
-  margin-left: auto; /* Aggiunto per centrare */
-  margin-right: auto; /* Aggiunto per centrare */
-  height: 100px;
-  min-height: 100px;
-  background: #1e1f21;
-  border-radius: 5px;
-  cursor: pointer;
-  display: block;
+  gap: 20px;
+  padding-bottom: 10px;         /* Per evitare che l'ultimo blocco sia tagliato */
 }
 
 
+.item-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Pulsanti principali House Wall */
 .item {
   background: #444;
   padding: 10px;
@@ -61,6 +53,7 @@ canvas {
   border-radius: 5px;
   user-select: none;
   transition: background 0.2s ease;
+  margin-bottom: 5px;
 }
 
 .item:hover {
@@ -71,43 +64,22 @@ canvas {
   background: #888;
 }
 
-.item-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.item {
-  background: #444;
-  padding: 10px;
-  text-align: center;
-  cursor: pointer;
-  border-radius: 5px;
-  user-select: none;
-  margin-bottom: 5px;
-}
-
-.item:hover {
-  background: #666;
-}
-
 .submenu {
   display: none;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 5px; /* Aggiunto per spaziatura verticale */
+  gap: 10px;
+  margin-top: 5px;
   margin-bottom: 10px;
 }
 
-.subitem {
-  background: #333;
-  padding: 8px;
-  text-align: left;
-  cursor: pointer;
+.preview {
+  width: 90%;
+  height: 120px;
+  min-height: 120px;
+  margin: 0 auto;
+  background: #1e1f21;
   border-radius: 5px;
-  font-size: 14px;
-  color: #ddd;
-}
-
-.subitem:hover {
-  background: #555;
+  cursor: pointer;
+  display: block;
+  border: 1px solid #333;
 }
