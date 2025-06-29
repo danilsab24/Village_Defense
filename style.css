@@ -72,6 +72,50 @@ canvas {
   margin-bottom: 10px;
 }
 
+/* button DONE */
+#done-button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 15px;
+  background-color: #90ee90; /* Verde chiaro */
+  color: #1e1f21;
+  font-weight: bold;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  user-select: none;
+}
+
+#done-button:hover {
+  background-color: #32cd32; /* Verde acceso */
+}
+
+/* Stili per la Barra di Potenza */
+#power-bar-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  height: 25px;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 10px;
+  border: 2px solid #fff;
+  z-index: 100;
+  display: none; /* Nascosta di default, la mostreremo via JS */
+  padding: 3px;
+}
+
+#power-bar {
+  width: 0%; /* Parte da 0 */
+  height: 100%;
+  background: linear-gradient(90deg, #ffee00, #ff6600, #ff0000);
+  border-radius: 6px;
+  transition: width 0.1s linear;
+}
+
 .preview {
   width: 90%;
   height: 120px;

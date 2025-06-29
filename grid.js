@@ -1,4 +1,3 @@
-// grid.js
 import * as THREE from 'https://esm.sh/three@0.150.1';
 
 export class Grid {

@@ -1,22 +1,24 @@
-// main.js – gestione camera + grid + drag&drop + evidenzia/muovi/rimuovi blocchi
 import * as THREE from 'https://esm.sh/three@0.150.1';
 import { OrbitControls } from 'https://esm.sh/three@0.150.1/examples/jsm/controls/OrbitControls.js';
 import { Grid } from './grid.js';
 import { setupDragAndDrop } from './DragAndDrop.js';
 import { setupMoveAndRemove } from './MoveAndRemove.js';
-// for the texture of WALL and STRONGblock
 import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+import { CannonManager } from './cannon.js';
 
 const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 
-
 let scene, camera, renderer, controls;
 let grid, dragManager, moveRemoveManager;
+let cannonManager; 
+let gameState = 'BUILDING';
+const clock = new THREE.Clock();
 
 const moveKeys   = { w:false, a:false, s:false, d:false, q:false, e:false, r:false, f:false };
-const moveSpeed  = 0.5;   // translation speed per frame
-const rotateStep = 0.04;  // radians per frame for keyboard orbit
+const moveSpeed  = 0.5;
+const rotateStep = 0.04;
+
 
 init();
 animate();
@@ -54,22 +56,18 @@ function init() {
 	light.position.set(pos.x, pos.y, pos.z);
 	scene.add(light);
 
-	// Opzionale: helper visivo per debug
 	const helper = new THREE.PointLightHelper(light, 2);
 	scene.add(helper);
 });
 
 	grid = new Grid(scene);
-	dragManager = setupDragAndDrop({ scene, camera, renderer, grid, controls });
+	const getGameState = () => gameState;
+	dragManager = setupDragAndDrop({ scene, camera, renderer, grid, controls, getGameState });
 
-	// setup hover, click, double click handlers
+    cannonManager = new CannonManager(scene, camera, controls);
+
 	moveRemoveManager = setupMoveAndRemove({
-		scene,
-		camera,
-		renderer,
-		controls,
-		dragManager,
-		grid
+		scene, camera, renderer, controls, dragManager, grid
 	});
 
 	window.addEventListener('keydown', e => {
@@ -84,11 +82,30 @@ function init() {
 	initUI();
 }
 
-function animate(){
-	requestAnimationFrame(animate);
-	keyboardControl();
-	controls.update();
-	renderer.render(scene, camera);
+
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+
+    // La logica di aggiornamento viene scelta in base allo stato
+    if (gameState === 'BUILDING') {
+        keyboardControl();
+        controls.update();
+    } else if (gameState === 'ATTACKING') {
+        const collidables = [];
+        scene.traverse(node => {
+            if (node.userData.isWall || node.userData.isHouse || node.userData.isStrongBlock) {
+                collidables.push(node);
+            }
+        });
+        // Aggiungiamo anche il piano della griglia per i rimbalzi
+        collidables.push(grid.getPlaneMesh());
+        
+        // Passiamo la lista al cannone
+        cannonManager.update(delta, collidables);
+    }
+    
+    renderer.render(scene, camera);
 }
 
 function keyboardControl(){
@@ -122,6 +139,28 @@ function rotateAroundTarget(axis, angle){
 	camera.lookAt(target);
 }
 
+
+async function startAttackPhase() {
+    console.log("Switching to ATTACK mode...");
+    gameState = 'ATTACKING';
+
+    // Disabilita tutti gli elementi della fase di costruzione
+    controls.enabled = true;
+    Object.keys(moveKeys).forEach(k => moveKeys[k] = false);
+    moveRemoveManager.dispose();
+    document.getElementById('sidebar').style.display = 'none';
+
+    // Carica il modello del cannone e aspetta che sia pronto
+    await cannonManager.load();
+
+    // Imposta la camera per la nuova vista
+    camera.position.set(0, 8, 48);
+    camera.lookAt(0, 5, 0);
+    controls.target.set(0, 5, 0);
+    
+    cannonManager.startAttackMode();
+}
+
 function initUI(){
 	document.querySelectorAll('.toggle').forEach(el => {
 		el.addEventListener('click', () => {
@@ -143,6 +182,8 @@ function initUI(){
 		});
 		obs.observe(canvas);
 	});
+
+	document.getElementById('done-button').addEventListener('click', startAttackPhase);
 }
 
 
@@ -156,7 +197,6 @@ function initPreviewCanvas(c) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputEncoding = THREE.sRGBEncoding;
 
-    // 1. Illuminazione migliorata
     scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
     dirLight.position.set(5, 10, 7.5);
@@ -168,14 +208,11 @@ function initPreviewCanvas(c) {
         const box = new THREE.Box3().setFromObject(target);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        
-        target.position.sub(center); // Centra l'oggetto nell'origine
-
+        target.position.sub(center);
         const maxSize = Math.max(size.x, size.y, size.z);
         const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
         const fitWidthDistance = fitHeightDistance / camera.aspect;
         const distance = 0.85 * Math.max(fitHeightDistance, fitWidthDistance);
-
         camera.position.set(distance, distance, distance);
         camera.lookAt(0, 0, 0);
     };
@@ -190,12 +227,7 @@ function initPreviewCanvas(c) {
 
     if (t.startsWith('house_h')) {
         const height = t.split('_h')[1];
-		const houseModelPaths = {
-			2: 'MODEL/2H_house.glb',
-			4: 'MODEL/4H_house.glb',
-			6: 'MODEL/6H_house.glb'
-		};
-
+		const houseModelPaths = { 2: 'MODEL/2H_house.glb', 4: 'MODEL/4H_house.glb', 6: 'MODEL/6H_house.glb' };
 		gltfLoader.load(houseModelPaths[height], (gltf) => {
 			previewObject = gltf.scene;
 			scene.add(previewObject);
@@ -205,11 +237,8 @@ function initPreviewCanvas(c) {
     } else {
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         let map;
-        if (t === 'cube') {
-            map = textureLoader.load('TEXTURE/DIRT.png');
-        } else if (t === 'strong') {
-            map = textureLoader.load('TEXTURE/STONE.png');
-        }
+        if (t === 'cube') { map = textureLoader.load('TEXTURE/DIRT.png'); } 
+        else if (t === 'strong') { map = textureLoader.load('TEXTURE/STONE.png'); }
         const material = new THREE.MeshStandardMaterial({ map: map });
         previewObject = new THREE.Mesh(geometry, material);
         scene.add(previewObject);

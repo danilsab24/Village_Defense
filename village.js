@@ -28,7 +28,6 @@ export class House {
     };
     this.mesh.position.copy(position);
 
-    // CARICA E AGGIUNGI IL MODELLO VISIBILE
     const modelPath = houseModels[height]; // Seleziona il modello corretto
     if (modelPath) {
         loader.load(modelPath, (gltf) => {

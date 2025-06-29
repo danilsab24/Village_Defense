@@ -86,8 +86,8 @@ function isPillarSupporting(scene, wall, cellSize, wallMap) {
     return false;
 }
 
-/**
- * Calcola se un blocco 'wall' fa parte di un pilastro che supporta una 'house'.
+/*
+  Calcola se un blocco 'wall' fa parte di un pilastro che supporta una 'house'.
  */
 export function isSupporting(scene, obj, cellSize) {
     if (!obj.userData?.isWall && !obj.userData?.isStrongBlock) return false;
@@ -102,9 +102,8 @@ export function isSupporting(scene, obj, cellSize) {
     return isPillarSupporting(scene, obj, cellSize, wallMap);
 }
 
-
-/**
- * Calcola l'altezza Y di destinazione per un oggetto che cade a causa della gravità.
+/*
+  Calcola l'altezza Y di destinazione per un oggetto che cade a causa della gravità.
  */
 export function computeTargetY(scene, obj, spans, cellSize) {
     const box = new THREE.Box3().setFromObject(obj);

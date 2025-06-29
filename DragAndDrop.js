@@ -4,7 +4,7 @@ import { Wall } from './wall.js';
 import { House } from './village.js';
 import { StrongBlock } from './StrongBlock.js';
 
-function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
+function setupDragAndDrop({ scene, camera, renderer, grid, controls, getGameState }) {
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -134,7 +134,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, controls }) {
     }
 
     function startDrag(type, evt) {
-        if (dragging) return;
+        if (dragging || getGameState() !== 'BUILDING') return;
         updateHeightMapFromScene();
         dragObject = createPreviewMesh(type);
         dragging = true;
