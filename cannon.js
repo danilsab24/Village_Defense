@@ -16,6 +16,7 @@ function normalizeAndCenterModel(gltfScene, targetSize) {
 }
 const textureLoader = new THREE.TextureLoader();
 const cannonballTexture = textureLoader.load('TEXTURE/CANNONBALL.png');
+const crackedStoneTexture = textureLoader.load('TEXTURE/STONE_CRACKS.png');
 
 export class CannonManager {
     constructor(scene, camera, controls) {
@@ -194,38 +195,64 @@ export class CannonManager {
         this._checkHousesGravity();
     }
     
-    _updateProjectiles(timeStep) { 
+    _updateProjectiles(timeStep) {
         if (!this.raycaster) {
             this.raycaster = new THREE.Raycaster();
         }
+
         for (let i = this.activeProjectiles.length - 1; i >= 0; i--) {
             const projectile = this.activeProjectiles[i];
             const oldPosition = projectile.position.clone();
+
             projectile.userData.lifetime -= timeStep;
             projectile.userData.velocity.add(this.gravity.clone().multiplyScalar(timeStep));
             projectile.position.add(projectile.userData.velocity.clone().multiplyScalar(timeStep));
+
             const direction = projectile.position.clone().sub(oldPosition);
             const distance = direction.length();
             if (distance === 0) continue;
+
             direction.normalize();
             this.raycaster.set(oldPosition, direction);
             this.raycaster.far = distance;
             const intersections = this.raycaster.intersectObjects(this.collidables);
+
             if (intersections.length > 0) {
                 const closestHit = intersections[0];
                 const target = closestHit.object;
                 projectile.position.copy(closestHit.point);
                 const isGround = target.geometry.type === 'BoxGeometry' && target.position.y < 0;
-                if (target.userData.isStrongBlock || isGround) {
-                    const normal = closestHit.face.normal.clone();
-                    projectile.userData.velocity.reflect(normal).multiplyScalar(0.7);
-                    projectile.position.add(normal.multiplyScalar(0.1));
+
+                // LOGICA DI COLLISIONE per STRONG BLOCK
+                if (isGround) {
+                    // Il terreno fa sempre rimbalzare
+                    this._handleBounce(projectile, target);
+
+                } else if (target.userData.isStrongBlock) {
+                    // Se il blocco forte è già danneggiato...
+                    if (target.userData.isDamaged) {
+                        // distruggilo (secondo colpo).
+                        console.log("Blocco forte distrutto al secondo colpo!");
+                        this._handleDestruction(projectile, target);
+                        this.activeProjectiles.splice(i, 1);
+                        continue; 
+                    } else {
+                        // ..altrimenti, danneggialo e fai rimbalzare la palla (primo colpo).
+                        console.log("Blocco forte danneggiato!");
+                        target.userData.isDamaged = true;
+                        target.material.map = crackedStoneTexture;
+                        target.material.needsUpdate = true; 
+                        this._handleBounce(projectile, target);
+                    }
+
                 } else if (target.userData.isWall || target.userData.isHouse) {
+                    // I muri normali e le case si distruggono al primo colpo
                     this._handleDestruction(projectile, target);
                     this.activeProjectiles.splice(i, 1);
                     continue;
                 }
             }
+
             const isStillActive = this.activeProjectiles.includes(projectile);
             if (isStillActive && (projectile.position.y < -10 || projectile.userData.lifetime <= 0)) {
                 this.scene.remove(projectile);
