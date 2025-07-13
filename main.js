@@ -375,7 +375,7 @@ async function startAttackPhase() {
         return sessionState.placedCounts[type] >= sessionState.limits[type];
     });
     if (!allMandatoryPlaced) {
-        alert("Devi piazzare tutti i blocchi obbligatori prima di continuare!");
+        alert("You must place all mandatory blocks before continuing!");
         return;
     }
 
