@@ -126,9 +126,17 @@ function setupMoveAndRemove({ scene, camera, renderer, grid, dragManager, sessio
         const obj = pick(evt);
         // An object can only be moved if it exists and is not supporting anything
         if (!obj || isSupporting(scene, obj, cellSize)) return;
+
+        // Prevent moving 'wall' (cube) and 'strong' blocks with left-click.
+        // These blocks can only be deleted with right-click (handled in onRightClick)
+        if (obj.userData.type === 'cube' || obj.userData.type === 'strong') {
+            return; // Interrompe l'esecuzione, non facendo nulla per questi blocchi
+        }
+
+        // Remove the existing object and begin drag-and-drop to reposition it
         const type = obj.userData.type;
-        handleRemoval(obj);               // Remove the object and refund the cost
-        dragManager.startDrag(type, evt); // Immediately start dragging a new preview of the same type
+        handleRemoval(obj);
+        dragManager.startDrag(type, evt);
     }
 
     // Handles the 'contextmenu' event (right-click) to remove an object and apply gravity
