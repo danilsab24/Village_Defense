@@ -253,7 +253,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, getControls, getGameS
         const totalCost = cost * totalBlocks;
 
         if (sessionState.money < totalCost) {
-            alert("Fondi insufficienti per piazzare questa selezione!");
+            alert("Insufficient money to place this selection!");
             scene.remove(dragObject);
             return;
         }
@@ -262,7 +262,7 @@ function setupDragAndDrop({ scene, camera, renderer, grid, getControls, getGameS
              const limit = sessionState.limits[objType];
              const currentCount = sessionState.placedCounts[objType];
              if (limit !== undefined && currentCount >= limit) {
-                alert(`Hai già piazzato il numero massimo di ${objType}.`);
+                alert(`You have already placed the maximum number of ${objType}.`);
                 scene.remove(dragObject);
                 return;
             }
