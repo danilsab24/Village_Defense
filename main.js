@@ -924,6 +924,6 @@ function updateGameOverBubblePosition() {
     textBubble.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`;
 }
 
-// Start Everithing
+// Start Everything
 init();
 animate();
