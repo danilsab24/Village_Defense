@@ -588,7 +588,7 @@ function updateUI() {
     if (ballOptions.length > 0) {
         ballOptions[0].querySelector('span').textContent = `Base (${cannonManager.ballTypes.base.cost}$)`;
         ballOptions[1].querySelector('span').textContent = `Area (${cannonManager.ballTypes.area.cost}$)`;
-        ballOptions[2].querySelector('span').textContent = `Perforante (${cannonManager.ballTypes.punch.cost}$)`;
+        ballOptions[2].querySelector('span').textContent = `Punch (${cannonManager.ballTypes.punch.cost}$)`;
     }
 }
 
