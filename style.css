@@ -157,7 +157,7 @@ canvas {
 
 .game-title {
   font-family: "Press Start 2P", cursive;
-  font-size: 6.5em;
+  font-size: 5.3em;
   color: rgb(255, 151, 36);
   text-shadow: 5px 5px 0px rgba(0,0,0,0.4);
   position: absolute;
@@ -184,7 +184,7 @@ canvas {
 #castle-img {
   height: 90vh;
   bottom: 12%;
-  right: -7%;
+  right: -11%;
   z-index: 3;
   transform-origin: center 95%; /* Pivot from the base for hit animation */
   transform: translateY(-120vh); /* Start off-screen */
@@ -194,7 +194,7 @@ canvas {
 #cannon-img {
   height: 80vh;
   bottom: 6%;
-  left: -11%;
+  left: -15%;
   z-index: 3;
   transform-origin: center 95%; /* Pivot from the base for recoil */
   transform: translateY(-120vh); /* Start off-screen */
