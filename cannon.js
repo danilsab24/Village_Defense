@@ -97,7 +97,7 @@ export class CannonManager {
     
     // Asynchronously loads all 3D models required for the cannon and assembles them
     async load() {
-        console.log('--- [Cannon] caricamento modelli…');
+        console.log('[Cannon] caricamento modelli');
         try {
             // Load all models in parallel
             const [baseGltf, gearGltf, cannonGltf] = await Promise.all([
@@ -159,7 +159,7 @@ export class CannonManager {
             this.pitchAssembly.add(this.firstPersonViewAnchor);
             this.firstPersonViewAnchor.position.set(0, 2.2, 0.2);
             this.firstPersonViewAnchor.rotation.y = Math.PI
-            console.log('--- [Cannon] modelli caricati.');
+            console.log('[Cannon] modelli caricati');
         } catch (err) {
             console.error('[Cannon] ERRORE caricamento modelli:', err);
         }
@@ -194,7 +194,7 @@ export class CannonManager {
         const btn = document.getElementById('toggle-view-btn');
         const controls = this.getControls();
         if (!controls) {
-            console.error("I controlli non sono ancora stati inizializzati.");
+            console.error("Controlli non inizializzati");
             return;
         }
 
@@ -617,7 +617,7 @@ export class CannonManager {
 
     // Iteratively recalculates the resting Y-position for all blocks to handle chain reactions
     _recalculateAllGravity() {
-        console.log("Inizio ricalcolo gravità a catena...");
+        console.log("Inizio ricalcolo gravità a catena");
         const maxIterations = 100;
         let iterations = 0;
         let changedInLastPass;
